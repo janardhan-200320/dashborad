@@ -3,21 +3,50 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useOnboarding } from '@/contexts/OnboardingContext';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
+import { useLocation } from 'wouter';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Step4CustomLabels() {
   const { data, updateData, prevStep } = useOnboarding();
   const [eventTypeLabel, setEventTypeLabel] = useState(data.eventTypeLabel);
   const [teamMemberLabel, setTeamMemberLabel] = useState(data.teamMemberLabel);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     updateData({ eventTypeLabel, teamMemberLabel });
-    console.log('Onboarding completed!', {
+    
+    const finalData = {
       ...data,
       eventTypeLabel,
       teamMemberLabel,
-    });
-    alert('Account created successfully!');
+    };
+
+    setIsSubmitting(true);
+
+    try {
+      await apiRequest('POST', '/api/onboarding', finalData);
+
+      toast({
+        title: 'Success!',
+        description: 'Your account has been created successfully.',
+      });
+
+      // Redirect to success page
+      setLocation('/success');
+    } catch (error) {
+      console.error('Error creating onboarding:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create account. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleBack = () => {
@@ -80,11 +109,18 @@ export default function Step4CustomLabels() {
         </Button>
         <Button
           onClick={handleCreate}
-          disabled={!eventTypeLabel.trim() || !teamMemberLabel.trim()}
+          disabled={!eventTypeLabel.trim() || !teamMemberLabel.trim() || isSubmitting}
           data-testid="button-create"
           className="min-w-32"
         >
-          Create
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            'Create'
+          )}
         </Button>
       </div>
     </div>
