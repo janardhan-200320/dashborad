@@ -31,7 +31,16 @@ type AdminSection =
   | 'locations' 
   | 'customers' 
   | 'reports'
-  | 'integrations' 
+  | 'integrations-most-popular'
+  | 'integrations-calendars'
+  | 'integrations-video'
+  | 'integrations-crm'
+  | 'integrations-payments'
+  | 'integrations-sms'
+  | 'integrations-analytics'
+  | 'integrations-connectors'
+  | 'integrations-support'
+  | 'integrations-accounting'
   | 'customizations' 
   | 'data-admin';
 
@@ -69,8 +78,26 @@ export default function AdminCenter() {
         return <Customers />;
       case 'reports':
         return <Reports />;
-      case 'integrations':
-        return <Integrations />;
+      case 'integrations-most-popular':
+        return <Integrations category="most-popular" />;
+      case 'integrations-calendars':
+        return <Integrations category="calendars" />;
+      case 'integrations-video':
+        return <Integrations category="video-conferencing" />;
+      case 'integrations-crm':
+        return <Integrations category="crm-sales" />;
+      case 'integrations-payments':
+        return <Integrations category="payments" />;
+      case 'integrations-sms':
+        return <Integrations category="sms" />;
+      case 'integrations-analytics':
+        return <Integrations category="analytics" />;
+      case 'integrations-connectors':
+        return <Integrations category="connectors" />;
+      case 'integrations-support':
+        return <Integrations category="support" />;
+      case 'integrations-accounting':
+        return <Integrations category="accounting" />;
       case 'customizations':
         return <Customizations />;
       case 'data-admin':
@@ -261,16 +288,134 @@ export default function AdminCenter() {
               </button>
               {integrationsExpanded && (
                 <div className="ml-3 mt-1 space-y-1">
+                  {/* Most Popular */}
                   <button
-                    onClick={() => setCurrentSection('integrations')}
+                    onClick={() => setCurrentSection('integrations-most-popular')}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
-                      currentSection === 'integrations' 
+                      currentSection === 'integrations-most-popular' 
                         ? 'bg-indigo-50 text-indigo-600 font-medium' 
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                    All Integrations
+                    Most Popular
+                  </button>
+
+                  {/* Calendars */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-calendars')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-calendars' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Calendars
+                  </button>
+
+                  {/* Video Conferencing */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-video')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-video' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Video Conferencing
+                  </button>
+
+                  {/* CRM & Sales */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-crm')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-crm' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    CRM & Sales
+                  </button>
+
+                  {/* Payments */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-payments')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-payments' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Payments
+                  </button>
+
+                  {/* SMS */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-sms')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-sms' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    SMS
+                  </button>
+
+                  {/* Analytics */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-analytics')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-analytics' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Analytics
+                  </button>
+
+                  {/* Connectors */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-connectors')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-connectors' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Connectors
+                  </button>
+
+                  {/* Support */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-support')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-support' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Support
+                  </button>
+
+                  {/* Accounting & Invoices */}
+                  <button
+                    onClick={() => setCurrentSection('integrations-accounting')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'integrations-accounting' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Accounting & Invoices
                   </button>
                 </div>
               )}

@@ -24,8 +24,15 @@ type AdminSection = 'basic-info' | 'business-hours' | 'booking-page' | 'login-pr
   'workspaces' | 'resources' | 'locations' | 'customers' | 'reports' |
   'integrations' | 'customizations' | 'data-admin';
 
+type SettingCard = {
+  icon: any;
+  title: string;
+  options: string[];
+  category?: string;
+}
+
 export default function AdminCenterPage() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [currentSection, setCurrentSection] = useState<AdminSection>('basic-info');
   const [organizationExpanded, setOrganizationExpanded] = useState(true);
@@ -45,7 +52,10 @@ export default function AdminCenterPage() {
   const [selectedWorkspace, setSelectedWorkspace] = useState<any>(null);
   const [selectedResource, setSelectedResource] = useState<any>(null);
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
+  const [moduleViewOpen, setModuleViewOpen] = useState(false);
+  const [moduleViewType, setModuleViewType] = useState<'workspaces' | 'resources' | 'locations' | 'customers' | 'reports' | null>(null);
   const [connectingIntegration, setConnectingIntegration] = useState<string | null>(null);
+  const [selectedCard, setSelectedCard] = useState<SettingCard | null>(null);
   
   const [orgSettings, setOrgSettings] = useState({
     companyName: 'bharath',
@@ -96,6 +106,28 @@ export default function AdminCenterPage() {
   const [newWorkspace, setNewWorkspace] = useState({ name: '', description: '' });
   const [newResource, setNewResource] = useState({ name: '', type: 'room' });
   const [newLocation, setNewLocation] = useState({ name: '', address: '', directions: '' });
+
+  // If URL contains a module keyword, open the modules page automatically.
+  useEffect(() => {
+    if (!location) return;
+    const path = location.toLowerCase();
+    if (path.includes('workspaces')) {
+      setModuleViewType('workspaces');
+      setModuleViewOpen(true);
+    } else if (path.includes('resources')) {
+      setModuleViewType('resources');
+      setModuleViewOpen(true);
+    } else if (path.includes('locations')) {
+      setModuleViewType('locations');
+      setModuleViewOpen(true);
+    } else if (path.includes('customers')) {
+      setModuleViewType('customers');
+      setModuleViewOpen(true);
+    } else if (path.includes('reports')) {
+      setModuleViewType('reports');
+      setModuleViewOpen(true);
+    }
+  }, [location]);
 
   useEffect(() => {
     const saved = localStorage.getItem('zervos_admin_settings');
@@ -247,6 +279,21 @@ export default function AdminCenterPage() {
   })).filter(section => section.cards.length > 0);
 
   const handleCardClick = (card: SettingCard) => {
+    // If user clicks a modules card, open the full modules view (matching screenshots)
+    if (card.category === 'modules') {
+      const key = card.title.toLowerCase().includes('workspace') ? 'workspaces'
+        : card.title.toLowerCase().includes('resource') ? 'resources'
+        : card.title.toLowerCase().includes('location') ? 'locations'
+        : card.title.toLowerCase().includes('customer') ? 'customers'
+        : card.title.toLowerCase().includes('report') ? 'reports'
+        : null;
+      if (key) {
+        setModuleViewType(key as any);
+        setModuleViewOpen(true);
+        return;
+      }
+    }
+
     setSelectedCard(card);
   };
 
@@ -761,51 +808,190 @@ export default function AdminCenterPage() {
 
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-6 py-8 space-y-12">
-          {filteredSections.length === 0 ? (
-            <div className="text-center py-12">
-              <Search size={48} className="mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No settings found</h3>
-              <p className="text-gray-600">Try searching with different keywords</p>
-            </div>
-          ) : (
-            filteredSections.map((section, sectionIndex) => (
-              <div key={sectionIndex}>
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">{section.title}</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {section.cards.map((card, cardIndex) => {
-                    const Icon = card.icon;
-                    return (
-                      <div 
-                        key={cardIndex}
-                        onClick={() => handleCardClick(card)}
-                        className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
-                              <Icon size={24} className="text-purple-600" />
-                            </div>
-                            <h3 className="font-semibold text-gray-900">{card.title}</h3>
-                          </div>
-                          <ChevronRight size={20} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
-                        </div>
-                        <ul className="space-y-2">
-                          {card.options.map((option, optionIndex) => (
-                            <li 
-                              key={optionIndex}
-                              className="text-sm text-gray-600 hover:text-purple-600 transition-colors flex items-center gap-2"
-                            >
-                              <div className="w-1.5 h-1.5 bg-gray-300 rounded-full group-hover:bg-purple-400 transition-colors"></div>
-                              {option}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })}
+          {moduleViewOpen ? (
+            <div className="grid grid-cols-12 gap-6">
+              {/* Left slim modules list (matches screenshots) */}
+              <div className="col-span-3 md:col-span-3">
+                <div className="bg-white rounded-lg border border-gray-200 p-4 sticky top-20">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3">Admin Center</h3>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => { setModuleViewType('workspaces'); }}
+                      className={`w-full text-left px-3 py-2 rounded-md ${moduleViewType === 'workspaces' ? 'bg-purple-50 text-purple-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-3"><Folder size={16} /> Workspaces</div>
+                    </button>
+                    <button
+                      onClick={() => { setModuleViewType('resources'); }}
+                      className={`w-full text-left px-3 py-2 rounded-md ${moduleViewType === 'resources' ? 'bg-purple-50 text-purple-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-3"><Package size={16} /> Resources</div>
+                    </button>
+                    <button
+                      onClick={() => { setModuleViewType('locations'); }}
+                      className={`w-full text-left px-3 py-2 rounded-md ${moduleViewType === 'locations' ? 'bg-purple-50 text-purple-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-3"><MapPin size={16} /> In-person Locations</div>
+                    </button>
+                    <button
+                      onClick={() => { setModuleViewType('customers'); }}
+                      className={`w-full text-left px-3 py-2 rounded-md ${moduleViewType === 'customers' ? 'bg-purple-50 text-purple-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-3"><UsersRound size={16} /> Customers</div>
+                    </button>
+                    <button
+                      onClick={() => { setModuleViewType('reports'); }}
+                      className={`w-full text-left px-3 py-2 rounded-md ${moduleViewType === 'reports' ? 'bg-purple-50 text-purple-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-3"><BarChart3 size={16} /> Reports</div>
+                    </button>
+                  </div>
                 </div>
               </div>
-            ))
+
+              {/* Right main area */}
+              <div className="col-span-9 md:col-span-9">
+                <div className="bg-white border border-gray-200 rounded-lg p-6 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-xl font-semibold text-gray-900 capitalize">{moduleViewType}</h2>
+                    <Badge variant="outline">{moduleViewType === 'workspaces' ? workspaces.length : moduleViewType === 'resources' ? resources.length : moduleViewType === 'locations' ? locations.length : 0}</Badge>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-80">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                      <Input className="pl-10" placeholder={`Search ${moduleViewType}`} />
+                    </div>
+                    <Button onClick={() => {
+                      // open add modal for each module type
+                      if (moduleViewType === 'workspaces') setWorkspaceModalOpen(true);
+                      if (moduleViewType === 'resources') setResourceModalOpen(true);
+                      if (moduleViewType === 'locations') setLocationModalOpen(true);
+                    }}>
+                      <Plus size={14} className="mr-2" /> New {moduleViewType?.slice(0, -1)}
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setModuleViewOpen(false); setModuleViewType(null); }}>
+                      Back
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-8 bg-white border border-gray-200 rounded-lg p-12 text-center">
+                  {/* Empty state for each module (very similar to screenshots) */}
+                  {moduleViewType === 'workspaces' && workspaces.length === 0 && (
+                    <div>
+                      <div className="mx-auto w-40 h-40 bg-purple-50 rounded-full mb-6 flex items-center justify-center">
+                        <Folder size={36} className="text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900">No workspaces added.</h3>
+                      <p className="text-gray-600 mt-2 mb-6">Add workspaces to organize your team and services.</p>
+                      <Button onClick={() => setWorkspaceModalOpen(true)}>
+                        + New Workspace
+                      </Button>
+                    </div>
+                  )}
+
+                  {moduleViewType === 'resources' && resources.length === 0 && (
+                    <div>
+                      <div className="mx-auto w-40 h-40 bg-purple-50 rounded-full mb-6 flex items-center justify-center">
+                        <Package size={36} className="text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900">No resources added.</h3>
+                      <p className="text-gray-600 mt-2 mb-6">Add rooms and equipment so customers can book them.</p>
+                      <Button onClick={() => setResourceModalOpen(true)}>
+                        + New Resource
+                      </Button>
+                    </div>
+                  )}
+
+                  {moduleViewType === 'locations' && locations.length === 0 && (
+                    <div>
+                      <div className="mx-auto w-40 h-40 bg-purple-50 rounded-full mb-6 flex items-center justify-center">
+                        <MapPin size={36} className="text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900">No in-person locations added.</h3>
+                      <p className="text-gray-600 mt-2 mb-6">Add meeting addresses for appointments.</p>
+                      <Button onClick={() => setLocationModalOpen(true)}>
+                        + New In-person Location
+                      </Button>
+                    </div>
+                  )}
+
+                  {moduleViewType === 'customers' && (
+                    <div>
+                      {/* assume customers array isn't implemented; show empty-state like screenshot */}
+                      <div className="mx-auto w-40 h-40 bg-purple-50 rounded-full mb-6 flex items-center justify-center">
+                        <UsersRound size={36} className="text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900">No customers added</h3>
+                      <p className="text-gray-600 mt-2 mb-6">Add customers to book appointments with them. They are added automatically when they book via your page.</p>
+                      <Button>
+                        + New Customer
+                      </Button>
+                    </div>
+                  )}
+
+                  {moduleViewType === 'reports' && (
+                    <div>
+                      <div className="mx-auto w-40 h-40 bg-purple-50 rounded-full mb-6 flex items-center justify-center">
+                        <BarChart3 size={36} className="text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900">No reports added</h3>
+                      <p className="text-gray-600 mt-2 mb-6">Create reports to view booking statistics and revenue.</p>
+                      <Button>
+                        + New Report
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            filteredSections.length === 0 ? (
+              <div className="text-center py-12">
+                <Search size={48} className="mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No settings found</h3>
+                <p className="text-gray-600">Try searching with different keywords</p>
+              </div>
+            ) : (
+              filteredSections.map((section, sectionIndex) => (
+                <div key={sectionIndex}>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6">{section.title}</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {section.cards.map((card, cardIndex) => {
+                      const Icon = card.icon;
+                      return (
+                        <div 
+                          key={cardIndex}
+                          onClick={() => handleCardClick(card)}
+                          className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                                <Icon size={24} className="text-purple-600" />
+                              </div>
+                              <h3 className="font-semibold text-gray-900">{card.title}</h3>
+                            </div>
+                            <ChevronRight size={20} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
+                          </div>
+                          <ul className="space-y-2">
+                            {card.options.map((option, optionIndex) => (
+                              <li 
+                                key={optionIndex}
+                                className="text-sm text-gray-600 hover:text-purple-600 transition-colors flex items-center gap-2"
+                              >
+                                <div className="w-1.5 h-1.5 bg-gray-300 rounded-full group-hover:bg-purple-400 transition-colors"></div>
+                                {option}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )
           )}
         </div>
 
