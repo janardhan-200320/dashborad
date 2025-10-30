@@ -14,7 +14,7 @@ import SettingsPage from "@/pages/settings";
 import FormInfoPage from "@/pages/form-info";
 import ServicesPage from "@/pages/services";
 import CustomersPage from "@/pages/customers";
-import AdminCenterPage from "@/pages/admin-center";
+import AdminCenterPage from "@/pages/admin";
 import SalespersonsPage from "@/pages/salespersons";
 import PublicBookingPage from "@/pages/public-booking";
 import NotFound from "@/pages/not-found";
@@ -25,7 +25,7 @@ function Router() {
       <Route path="/" component={Onboarding} />
       <Route path="/success" component={Success} />
       <Route path="/book/:serviceId" component={PublicBookingPage} />
-      <Route path="/dashboard" component={DashboardMain} />
+      <Route path="/dashboard" component={FormInfoPage} />
       <Route path="/dashboard/appointments" component={AppointmentsPage} />
       <Route path="/dashboard/callbacks" component={CallbacksPage} />
       <Route path="/dashboard/timeslots" component={TimeslotsPage} />

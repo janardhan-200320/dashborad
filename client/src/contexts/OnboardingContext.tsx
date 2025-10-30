@@ -1,7 +1,10 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export interface OnboardingData {
   businessName: string;
+  businessLogo: string;
+  location: string;
+  description: string;
   websiteUrl: string;
   currency: string;
   industries: string[];
@@ -12,6 +15,17 @@ export interface OnboardingData {
   availableTimeEnd: string;
   eventTypeLabel: string;
   teamMemberLabel: string;
+  customFields: CustomField[];
+  isCompleted: boolean;
+}
+
+export interface CustomField {
+  id: string;
+  label: string;
+  type: 'text' | 'email' | 'phone' | 'dropdown' | 'checkbox' | 'textarea';
+  required: boolean;
+  options?: string[];
+  placeholder?: string;
 }
 
 interface OnboardingContextType {
@@ -33,21 +47,45 @@ export const useOnboarding = () => {
   return context;
 };
 
+const STORAGE_KEY = 'zervos_onboarding';
+
 export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
   const [currentStep, setCurrentStep] = useState(1);
-  const [data, setData] = useState<OnboardingData>({
-    businessName: '',
-    websiteUrl: '',
-    currency: 'INR',
-    industries: [],
-    businessNeeds: [],
-    timezone: 'Asia/Kolkata - IST (+05:30)',
-    availableDays: [],
-    availableTimeStart: '09:00 am',
-    availableTimeEnd: '06:00 pm',
-    eventTypeLabel: 'Properties Management',
-    teamMemberLabel: 'Agents',
+  
+  // Initialize with localStorage data or defaults
+  const [data, setData] = useState<OnboardingData>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // If parsing fails, use defaults
+      }
+    }
+    return {
+      businessName: '',
+      businessLogo: '',
+      location: '',
+      description: '',
+      websiteUrl: '',
+      currency: 'INR',
+      industries: [],
+      businessNeeds: [],
+      timezone: 'Asia/Kolkata - IST (+05:30)',
+      availableDays: [],
+      availableTimeStart: '09:00 am',
+      availableTimeEnd: '06:00 pm',
+      eventTypeLabel: 'Properties Management',
+      teamMemberLabel: 'Agents',
+      customFields: [],
+      isCompleted: false,
+    };
   });
+
+  // Save to localStorage whenever data changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }, [data]);
 
   const updateData = (updates: Partial<OnboardingData>) => {
     setData((prev) => ({ ...prev, ...updates }));

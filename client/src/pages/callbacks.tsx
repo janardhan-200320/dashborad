@@ -132,27 +132,49 @@ export default function WorkflowsPage() {
     numberOfRecurrences: '1',
   });
 
-  // Mock salespersons data
-  const [salespersons] = useState<Salesperson[]>([
-    {
-      id: '1',
-      name: 'Bharath Reddy',
-      email: 'bharathreddyn6@gmail.com',
-      avatar: 'BH'
-    },
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      email: 'sarah@company.com',
-      avatar: 'SJ'
-    },
-    {
-      id: '3',
-      name: 'Mike Williams',
-      email: 'mike@company.com',
-      avatar: 'MW'
-    },
-  ]);
+  // Load salespersons from localStorage
+  const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
+
+  // Load team members/salespersons on mount
+  useEffect(() => {
+    try {
+      const savedMembers = localStorage.getItem('zervos_team_members');
+      if (savedMembers) {
+        const members = JSON.parse(savedMembers);
+        const formatted = members.map((member: any) => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          avatar: member.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+        }));
+        setSalespersons(formatted);
+      } else {
+        // Default salespersons
+        setSalespersons([
+          {
+            id: '1',
+            name: 'Bharath Reddy',
+            email: 'bharathreddyn6@gmail.com',
+            avatar: 'BR'
+          },
+          {
+            id: '2',
+            name: 'Sarah Johnson',
+            email: 'sarah@company.com',
+            avatar: 'SJ'
+          },
+          {
+            id: '3',
+            name: 'Mike Williams',
+            email: 'mike@company.com',
+            avatar: 'MW'
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error('Error loading team members:', error);
+    }
+  }, []);
 
   const filteredWorkflows = workflows.filter(wf =>
     wf.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

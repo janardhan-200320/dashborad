@@ -70,6 +70,9 @@ export default function AppointmentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+  const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
+  const [isCancelOpen, setIsCancelOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [newAppointment, setNewAppointment] = useState({
     customerName: '',
     service: '',
@@ -77,6 +80,12 @@ export default function AppointmentsPage() {
     date: '',
     time: '',
   });
+  const [rescheduleData, setRescheduleData] = useState({
+    date: '',
+    time: '',
+    reason: ''
+  });
+  const [cancelReason, setCancelReason] = useState('');
 
   const filteredAppointments = appointments.filter(apt => {
     const matchesSearch = apt.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -103,10 +112,71 @@ export default function AppointmentsPage() {
   };
 
   const handleUpdateStatus = (id: string, newStatus: 'upcoming' | 'completed' | 'cancelled') => {
-    setAppointments(appointments.map(apt =>
+    const updated = appointments.map(apt =>
       apt.id === id ? { ...apt, status: newStatus } : apt
-    ));
+    );
+    setAppointments(updated);
+    localStorage.setItem('zervos_appointments', JSON.stringify(updated));
   };
+
+  const handleOpenReschedule = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    setRescheduleData({
+      date: apt.date,
+      time: apt.time,
+      reason: ''
+    });
+    setIsRescheduleOpen(true);
+  };
+
+  const handleReschedule = () => {
+    if (!selectedAppointment) return;
+    
+    const updated = appointments.map(apt =>
+      apt.id === selectedAppointment.id 
+        ? { ...apt, date: rescheduleData.date, time: rescheduleData.time } 
+        : apt
+    );
+    setAppointments(updated);
+    localStorage.setItem('zervos_appointments', JSON.stringify(updated));
+    setIsRescheduleOpen(false);
+    setRescheduleData({ date: '', time: '', reason: '' });
+    setSelectedAppointment(null);
+  };
+
+  const handleOpenCancel = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    setCancelReason('');
+    setIsCancelOpen(true);
+  };
+
+  const handleCancel = () => {
+    if (!selectedAppointment) return;
+    
+    const updated = appointments.map(apt =>
+      apt.id === selectedAppointment.id 
+        ? { ...apt, status: 'cancelled' as const } 
+        : apt
+    );
+    setAppointments(updated);
+    localStorage.setItem('zervos_appointments', JSON.stringify(updated));
+    setIsCancelOpen(false);
+    setCancelReason('');
+    setSelectedAppointment(null);
+  };
+
+  // Load appointments from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('zervos_appointments');
+      if (saved) {
+        setAppointments(JSON.parse(saved));
+      } else {
+        // Save default appointments
+        localStorage.setItem('zervos_appointments', JSON.stringify(appointments));
+      }
+    } catch {}
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const styles = {
@@ -226,11 +296,11 @@ export default function AppointmentsPage() {
                             <CheckCircle size={16} className="mr-2" />
                             Mark Completed
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleUpdateStatus(apt.id, 'cancelled')}>
+                          <DropdownMenuItem onClick={() => handleOpenCancel(apt)}>
                             <XCircle size={16} className="mr-2" />
                             Cancel
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenReschedule(apt)}>
                             <Edit size={16} className="mr-2" />
                             Reschedule
                           </DropdownMenuItem>
@@ -327,6 +397,118 @@ export default function AppointmentsPage() {
                 disabled={!newAppointment.customerName || !newAppointment.service || !newAppointment.staff || !newAppointment.date || !newAppointment.time}
               >
                 Create Appointment
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reschedule Modal */}
+        <Dialog open={isRescheduleOpen} onOpenChange={setIsRescheduleOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reschedule Appointment</DialogTitle>
+              <DialogDescription>
+                Change the date and time for {selectedAppointment?.customerName}'s appointment
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-sm text-gray-600">Current booking:</p>
+                <p className="font-medium">{selectedAppointment?.service}</p>
+                <p className="text-sm text-gray-600">
+                  {selectedAppointment?.date} at {selectedAppointment?.time}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reschedule-date">New Date</Label>
+                  <Input
+                    id="reschedule-date"
+                    type="date"
+                    value={rescheduleData.date}
+                    onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reschedule-time">New Time</Label>
+                  <Input
+                    id="reschedule-time"
+                    type="time"
+                    value={rescheduleData.time}
+                    onChange={(e) => setRescheduleData({ ...rescheduleData, time: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reschedule-reason">Reason (Optional)</Label>
+                <Input
+                  id="reschedule-reason"
+                  placeholder="e.g., Schedule conflict"
+                  value={rescheduleData.reason}
+                  onChange={(e) => setRescheduleData({ ...rescheduleData, reason: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRescheduleOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleReschedule}
+                disabled={!rescheduleData.date || !rescheduleData.time}
+              >
+                Confirm Reschedule
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Cancel Modal */}
+        <Dialog open={isCancelOpen} onOpenChange={setIsCancelOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Cancel Appointment</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to cancel this appointment?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                <div className="flex items-start gap-3">
+                  <XCircle size={20} className="text-red-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-red-900">{selectedAppointment?.service}</p>
+                    <p className="text-sm text-red-700">
+                      {selectedAppointment?.customerName}
+                    </p>
+                    <p className="text-sm text-red-600">
+                      {selectedAppointment?.date} at {selectedAppointment?.time}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cancel-reason">Reason for Cancellation</Label>
+                <Input
+                  id="cancel-reason"
+                  placeholder="e.g., Customer request, Emergency"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                />
+              </div>
+              <p className="text-sm text-gray-600">
+                The customer will be notified about this cancellation.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsCancelOpen(false)}>
+                Keep Appointment
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={handleCancel}
+              >
+                Cancel Appointment
               </Button>
             </DialogFooter>
           </DialogContent>

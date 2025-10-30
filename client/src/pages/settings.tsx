@@ -31,35 +31,7 @@ interface TeamMember {
 
 export default function TeamMembersPage() {
   const [company, setCompany] = useState<any>(null);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
-    {
-      id: '1',
-      name: 'Sarah Johnson',
-      role: 'Senior Recruiter',
-      email: 'sarah@company.com',
-      phone: '+1 234 567 8900',
-      appointmentsCount: 45,
-      availability: 'Mon-Fri, 9 AM - 5 PM'
-    },
-    {
-      id: '2',
-      name: 'Mike Williams',
-      role: 'HR Manager',
-      email: 'mike@company.com',
-      phone: '+1 234 567 8901',
-      appointmentsCount: 32,
-      availability: 'Mon-Fri, 10 AM - 6 PM'
-    },
-    {
-      id: '3',
-      name: 'Emily Davis',
-      role: 'Talent Acquisition',
-      email: 'emily@company.com',
-      phone: '+1 234 567 8902',
-      appointmentsCount: 28,
-      availability: 'Tue-Sat, 9 AM - 5 PM'
-    },
-  ]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const [isNewMemberOpen, setIsNewMemberOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
@@ -72,6 +44,45 @@ export default function TeamMembersPage() {
     try {
       const raw = localStorage.getItem('zervos_company');
       if (raw) setCompany(JSON.parse(raw));
+      
+      // Load team members from localStorage
+      const savedMembers = localStorage.getItem('zervos_team_members');
+      if (savedMembers) {
+        setTeamMembers(JSON.parse(savedMembers));
+      } else {
+        // Set default members if none exist
+        const defaultMembers = [
+          {
+            id: '1',
+            name: 'Sarah Johnson',
+            role: 'Senior Recruiter',
+            email: 'sarah@company.com',
+            phone: '+1 234 567 8900',
+            appointmentsCount: 45,
+            availability: 'Mon-Fri, 9 AM - 5 PM'
+          },
+          {
+            id: '2',
+            name: 'Mike Williams',
+            role: 'HR Manager',
+            email: 'mike@company.com',
+            phone: '+1 234 567 8901',
+            appointmentsCount: 32,
+            availability: 'Mon-Fri, 10 AM - 6 PM'
+          },
+          {
+            id: '3',
+            name: 'Emily Davis',
+            role: 'Talent Acquisition',
+            email: 'emily@company.com',
+            phone: '+1 234 567 8902',
+            appointmentsCount: 28,
+            availability: 'Tue-Sat, 9 AM - 5 PM'
+          },
+        ];
+        setTeamMembers(defaultMembers);
+        localStorage.setItem('zervos_team_members', JSON.stringify(defaultMembers));
+      }
     } catch {}
   }, []);
 
@@ -91,7 +102,12 @@ export default function TeamMembersPage() {
       availability: 'Mon-Fri, 9 AM - 5 PM'
     }));
 
-    setTeamMembers([...teamMembers, ...newMembers]);
+    const updatedMembers = [...teamMembers, ...newMembers];
+    setTeamMembers(updatedMembers);
+    
+    // Save to localStorage
+    localStorage.setItem('zervos_team_members', JSON.stringify(updatedMembers));
+    
     setIsNewMemberOpen(false);
     setNewMember({
       emails: '',

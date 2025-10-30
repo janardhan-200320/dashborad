@@ -16,9 +16,18 @@ import {
   CheckCircle2,
   ArrowLeft,
   Globe,
-  Building2
+  Building2,
+  Download,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { 
+  generateGoogleCalendarUrl, 
+  generateOutlookCalendarUrl, 
+  downloadICalFile,
+  createEventDate,
+  type CalendarEvent 
+} from '@/lib/calendar-utils';
 
 interface Service {
   id: string;
@@ -233,6 +242,69 @@ export default function PublicBookingPage() {
 
   const handleBack = () => {
     if (step === 2) setStep(1);
+  };
+
+  const handleAddToGoogleCalendar = () => {
+    if (!selectedDate || !selectedTime || !service) return;
+    
+    const { start, end} = createEventDate(
+      selectedDate.toISOString().split('T')[0],
+      selectedTime,
+      30 // Default 30 minutes duration
+    );
+
+    const event: CalendarEvent = {
+      title: service.name,
+      description: `Meeting with ${service.hostName}\n\n${formData.notes || ''}`,
+      location: getLocationText(),
+      startTime: start,
+      endTime: end,
+      url: window.location.href
+    };
+
+    window.open(generateGoogleCalendarUrl(event), '_blank');
+  };
+
+  const handleAddToOutlook = () => {
+    if (!selectedDate || !selectedTime || !service) return;
+    
+    const { start, end } = createEventDate(
+      selectedDate.toISOString().split('T')[0],
+      selectedTime,
+      30
+    );
+
+    const event: CalendarEvent = {
+      title: service.name,
+      description: `Meeting with ${service.hostName}\n\n${formData.notes || ''}`,
+      location: getLocationText(),
+      startTime: start,
+      endTime: end,
+      url: window.location.href
+    };
+
+    window.open(generateOutlookCalendarUrl(event), '_blank');
+  };
+
+  const handleDownloadICal = () => {
+    if (!selectedDate || !selectedTime || !service) return;
+    
+    const { start, end } = createEventDate(
+      selectedDate.toISOString().split('T')[0],
+      selectedTime,
+      30
+    );
+
+    const event: CalendarEvent = {
+      title: service.name,
+      description: `Meeting with ${service.hostName}\n\n${formData.notes || ''}`,
+      location: getLocationText(),
+      startTime: start,
+      endTime: end,
+      url: window.location.href
+    };
+
+    downloadICalFile(event, `${service.name.replace(/\s+/g, '_')}.ics`);
   };
 
   const getLocationIcon = () => {
@@ -586,16 +658,34 @@ export default function PublicBookingPage() {
 
                     {/* Add to Calendar */}
                     <div className="space-y-3">
-                      <p className="text-sm text-gray-600">Add to your calendar:</p>
+                      <p className="text-sm font-medium text-gray-700">Add to your calendar:</p>
                       <div className="flex flex-wrap gap-2 justify-center">
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handleAddToGoogleCalendar}
+                          className="gap-2"
+                        >
+                          <ExternalLink size={14} />
                           Google Calendar
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handleAddToOutlook}
+                          className="gap-2"
+                        >
+                          <ExternalLink size={14} />
                           Outlook
                         </Button>
-                        <Button variant="outline" size="sm">
-                          Apple Calendar
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handleDownloadICal}
+                          className="gap-2"
+                        >
+                          <Download size={14} />
+                          Apple Calendar (.ics)
                         </Button>
                       </div>
                     </div>

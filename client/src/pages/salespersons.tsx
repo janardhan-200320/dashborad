@@ -44,29 +44,7 @@ interface Salesperson {
 
 export default function SalespersonsPage() {
   const [company, setCompany] = useState<any>(null);
-  const [salespersons, setSalespersons] = useState<Salesperson[]>([
-    {
-      id: '1',
-      name: 'Bharath Reddy',
-      email: 'bharath@company.com',
-      role: 'Super Admin',
-      color: 'from-purple-500 to-pink-500'
-    },
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      email: 'sarah@company.com',
-      role: 'Admin',
-      color: 'from-blue-500 to-cyan-500'
-    },
-    {
-      id: '3',
-      name: 'Mike Williams',
-      email: 'mike@company.com',
-      role: 'Salesperson',
-      color: 'from-green-500 to-emerald-500'
-    },
-  ]);
+  const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -81,6 +59,20 @@ export default function SalespersonsPage() {
     try {
       const raw = localStorage.getItem('zervos_company');
       if (raw) setCompany(JSON.parse(raw));
+      
+      // Load salespersons from localStorage
+      const savedMembers = localStorage.getItem('zervos_team_members');
+      if (savedMembers) {
+        const members = JSON.parse(savedMembers);
+        const formatted = members.map((member: any, index: number) => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          role: member.role || 'Salesperson',
+          color: member.color || getRandomColor()
+        }));
+        setSalespersons(formatted);
+      }
     } catch {}
   }, []);
 
@@ -112,10 +104,18 @@ export default function SalespersonsPage() {
       name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       email: email.trim(),
       role: newPerson.role,
-      color: getRandomColor()
+      color: getRandomColor(),
+      phone: '',
+      appointmentsCount: 0,
+      availability: 'Mon-Fri, 9 AM - 5 PM'
     }));
 
-    setSalespersons([...salespersons, ...newSalespersons]);
+    const updatedSalespersons = [...salespersons, ...newSalespersons];
+    setSalespersons(updatedSalespersons);
+    
+    // Save to localStorage
+    localStorage.setItem('zervos_team_members', JSON.stringify(updatedSalespersons));
+    
     setIsAddOpen(false);
     setNewPerson({
       emails: '',
@@ -137,7 +137,9 @@ export default function SalespersonsPage() {
   };
 
   const handleDelete = (id: string) => {
-    setSalespersons(salespersons.filter(p => p.id !== id));
+    const updated = salespersons.filter(p => p.id !== id);
+    setSalespersons(updated);
+    localStorage.setItem('zervos_team_members', JSON.stringify(updated));
     toast({
       title: "Deleted",
       description: `${teamMemberSingular} removed successfully`,
