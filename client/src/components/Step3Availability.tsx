@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useOnboarding } from '@/contexts/OnboardingContext';
+import { Calendar } from '@/components/ui/calendar';
 
 const timezones = [
   'Asia/Kolkata - IST (+05:30)',
@@ -42,26 +43,24 @@ export default function Step3Availability() {
   const [timezone, setTimezone] = useState(data.timezone);
   const [startTime, setStartTime] = useState(data.availableTimeStart);
   const [endTime, setEndTime] = useState(data.availableTimeEnd);
-  const [selectedDays, setSelectedDays] = useState<string[]>(
-    data.availableDays.length > 0 ? data.availableDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+  // Interpret existing availableDays as ISO date strings, if any
+  const initialDates = useMemo(
+    () => (data.availableDays || [])
+      .map((d) => new Date(d))
+      .filter((d) => !isNaN(d.getTime())),
+    [data.availableDays]
   );
+  const [selectedDates, setSelectedDates] = useState<Date[]>(initialDates);
 
-  const toggleDay = (day: string) => {
-    if (selectedDays.includes(day)) {
-      setSelectedDays(selectedDays.filter((d) => d !== day));
-    } else {
-      setSelectedDays([...selectedDays, day]);
-    }
-  };
-
-  const isFormValid = timezone && startTime && endTime && selectedDays.length > 0;
+  const isFormValid = timezone && startTime && endTime && selectedDates.length > 0;
 
   const handleNext = () => {
     updateData({
       timezone,
       availableTimeStart: startTime,
       availableTimeEnd: endTime,
-      availableDays: selectedDays,
+      // store as YYYY-MM-DD strings
+      availableDays: selectedDates.map((d) => d.toISOString().slice(0, 10)),
     });
     nextStep();
   };
@@ -71,7 +70,7 @@ export default function Step3Availability() {
       timezone,
       availableTimeStart: startTime,
       availableTimeEnd: endTime,
-      availableDays: selectedDays,
+      availableDays: selectedDates.map((d) => d.toISOString().slice(0, 10)),
     });
     prevStep();
   };
@@ -134,29 +133,13 @@ export default function Step3Availability() {
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Your available days</Label>
-          <div className="flex gap-2">
-            {daysOfWeek.map((day) => {
-              const isSelected = selectedDays.includes(day.short);
-              return (
-                <button
-                  key={day.short}
-                  onClick={() => toggleDay(day.short)}
-                  className={`
-                    flex-1 py-2 rounded-lg text-sm font-medium border transition-all
-                    ${
-                      isSelected
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background text-foreground border-border hover-elevate'
-                    }
-                  `}
-                  data-testid={`day-${day.short.toLowerCase()}`}
-                >
-                  {day.short}
-                </button>
-              );
-            })}
-          </div>
+          <Label className="text-sm font-medium">Pick available dates</Label>
+          <Calendar
+            mode="multiple"
+            selected={selectedDates}
+            onSelect={(dates) => setSelectedDates(dates ?? [])}
+            className="rounded-md border"
+          />
         </div>
       </div>
 

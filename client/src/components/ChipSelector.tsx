@@ -5,10 +5,17 @@ interface ChipSelectorProps {
   selected: string[];
   onChange: (selected: string[]) => void;
   label: string;
+  selectionMode?: 'single' | 'multiple';
 }
 
-export default function ChipSelector({ options, selected, onChange, label }: ChipSelectorProps) {
+export default function ChipSelector({ options, selected, onChange, label, selectionMode = 'multiple' }: ChipSelectorProps) {
   const toggleOption = (option: string) => {
+    if (selectionMode === 'single') {
+      // In single mode, clicking the same option will keep it selected
+      onChange([option]);
+      return;
+    }
+
     if (selected.includes(option)) {
       onChange(selected.filter((item) => item !== option));
     } else {

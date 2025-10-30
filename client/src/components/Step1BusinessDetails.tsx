@@ -46,7 +46,7 @@ export default function Step1BusinessDetails() {
     <div className="space-y-8">
       <div>
         <h2 className="text-lg text-muted-foreground mb-2">
-          Welcome to Zoho Bookings, Bharath Reddy!
+          Welcome to Zervos Bookings, Bharath Reddy!
         </h2>
         <h1 className="text-3xl font-semibold text-foreground">Let's get you meeting ready!</h1>
       </div>
