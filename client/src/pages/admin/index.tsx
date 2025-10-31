@@ -203,6 +203,17 @@ export default function AdminCenter() {
                     <span className="w-1 h-1 rounded-full bg-gray-400"></span>
                     Salespersons
                   </button>
+                  <button
+                    onClick={() => setCurrentSection('workflows')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'workflows' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Workflows
+                  </button>
                 </div>
               )}
             </div>

@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   Clock3
 } from 'lucide-react';
+import ProfileDropdown from './ProfileDropdown';
 
 interface Company {
   name: string;
@@ -46,7 +47,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   const navigation = [
     { name: 'Appointments', icon: Calendar, path: '/dashboard/appointments' },
     { name: eventTypeLabel, icon: PhoneCall, path: '/dashboard/callbacks' },
-    { name: 'Workflows', icon: Settings, path: '/dashboard/timeslots' },
+    { name: 'Workflows', icon: Settings, path: '/dashboard/workflows' },
     { name: teamMemberLabel, icon: Users, path: '/dashboard/settings' },
     { name: 'Booking Pages', icon: FileText, path: '/dashboard/form-info' },
   ];
@@ -140,25 +141,18 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
 
         {/* User Section */}
         <div className="border-t border-gray-700 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center">
-              <Users size={20} />
-            </div>
-            {sidebarOpen && (
-              <div className="flex-1">
+          {sidebarOpen ? (
+            <div className="flex items-center gap-3">
+              <ProfileDropdown />
+              <div className="flex-1 ml-2">
                 <p className="font-medium text-sm">Admin User</p>
                 <p className="text-xs text-gray-400">admin@zervos.com</p>
               </div>
-            )}
-          </div>
-          {sidebarOpen && (
-            <button 
-              onClick={handleLogout}
-              className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
-            >
-              <LogOut size={16} />
-              Logout
-            </button>
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <ProfileDropdown />
+            </div>
           )}
         </div>
       </div>
@@ -180,15 +174,18 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
               </h2>
             </div>
             
-            {company && (
-              <div className="flex items-center gap-3 px-4 py-2 bg-gray-100 rounded-lg">
-                <Building2 size={18} className="text-gray-600" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{company.name}</p>
-                  <p className="text-xs text-gray-500">{company.industry}</p>
+            <div className="flex items-center gap-4">
+              {company && (
+                <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-gray-100 rounded-lg">
+                  <Building2 size={18} className="text-gray-600" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{company.name}</p>
+                    <p className="text-xs text-gray-500">{company.industry}</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+              <ProfileDropdown />
+            </div>
           </div>
         </header>
 
