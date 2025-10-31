@@ -41,8 +41,14 @@ type AdminSection =
   | 'integrations-connectors'
   | 'integrations-support'
   | 'integrations-accounting'
-  | 'customizations' 
-  | 'data-admin';
+  | 'customizations'
+  | 'custom-domain'
+  | 'custom-in-product'
+  | 'custom-labels'
+  | 'custom-roles'
+  | 'data-privacy'
+  | 'data-domain-auth'
+  | 'data-export';
 
 export default function AdminCenter() {
   const [, setLocation] = useLocation();
@@ -100,8 +106,20 @@ export default function AdminCenter() {
         return <Integrations category="accounting" />;
       case 'customizations':
         return <Customizations />;
-      case 'data-admin':
-        return <DataAdmin />;
+      case 'custom-domain':
+        return <Customizations initialSection="custom-domain" />;
+      case 'custom-in-product':
+        return <Customizations initialSection="in-product" />;
+      case 'custom-labels':
+        return <Customizations initialSection="labels" />;
+      case 'custom-roles':
+        return <Customizations initialSection="roles" />;
+      case 'data-privacy':
+        return <DataAdmin initialSection="privacy" />;
+      case 'data-domain-auth':
+        return <DataAdmin initialSection="domain-auth" />;
+      case 'data-export':
+        return <DataAdmin initialSection="export" />;
       default:
         return <BasicInformation />;
     }
@@ -444,15 +462,51 @@ export default function AdminCenter() {
               {customizationsExpanded && (
                 <div className="ml-3 mt-1 space-y-1">
                   <button
-                    onClick={() => setCurrentSection('customizations')}
+                    onClick={() => setCurrentSection('custom-domain')}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
-                      currentSection === 'customizations' 
+                      currentSection === 'custom-domain' 
                         ? 'bg-indigo-50 text-indigo-600 font-medium' 
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                    All Customizations
+                    Custom Domain
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentSection('custom-in-product')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'custom-in-product' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    In-product Notifications
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentSection('custom-labels')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'custom-labels' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Custom Labels
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentSection('custom-roles')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'custom-roles' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Roles and Permissions
                   </button>
                 </div>
               )}
@@ -470,15 +524,39 @@ export default function AdminCenter() {
               {dataAdminExpanded && (
                 <div className="ml-3 mt-1 space-y-1">
                   <button
-                    onClick={() => setCurrentSection('data-admin')}
+                    onClick={() => setCurrentSection('data-privacy')}
                     className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
-                      currentSection === 'data-admin' 
+                      currentSection === 'data-privacy' 
                         ? 'bg-indigo-50 text-indigo-600 font-medium' 
                         : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     <span className="w-1 h-1 rounded-full bg-gray-400"></span>
-                    Data & Privacy
+                    Privacy and Security
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentSection('data-domain-auth')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'data-domain-auth' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Domain Authentication
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentSection('data-export')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md ${
+                      currentSection === 'data-export' 
+                        ? 'bg-indigo-50 text-indigo-600 font-medium' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-gray-400"></span>
+                    Export
                   </button>
                 </div>
               )}
