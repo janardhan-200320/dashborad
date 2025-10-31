@@ -90,10 +90,22 @@ export default function ProfileDropdown() {
   const subscriptionData = getSubscriptionData();
 
   const handleSignOut = () => {
-    // Clear user session
-    localStorage.removeItem('zervos_user_session');
-    // Redirect to login
-    setLocation('/login');
+    // Clear all keys that belong to this app's localStorage namespace
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('zervos_')) localStorage.removeItem(key);
+      });
+    } catch (e) {
+      // fallback: try removing common keys
+      localStorage.removeItem('zervos_user_session');
+      localStorage.removeItem('zervos_organization');
+      localStorage.removeItem('zervos_subscription');
+    }
+
+    // Navigate to the public/start page and reload to ensure any in-memory state is cleared
+    setLocation('/');
+    // Force a hard reload so any React state/context is reset
+    setTimeout(() => window.location.reload(), 50);
   };
 
   const handleViewOrgDetails = () => {
