@@ -17,6 +17,8 @@ import integrationsRouter from './routes/integrations.js';
 import customLabelsRouter from './routes/custom-labels.js';
 import rolesRouter from './routes/roles.js';
 import exportRouter from './routes/export.js';
+import authRouter from './routes/auth.js';
+import notificationSettingsRouter from './routes/notification-settings.js';
 
 dotenv.config();
 
@@ -50,6 +52,9 @@ app.use('/api/integrations', integrationsRouter);
 app.use('/api/custom-labels', customLabelsRouter);
 app.use('/api/roles', rolesRouter);
 app.use('/api/export', exportRouter);
+app.use('/api/notification-settings', notificationSettingsRouter);
+// Auth and sync endpoints (signup, login, sync)
+app.use('/api', authRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -95,6 +100,10 @@ app.listen(PORT, () => {
   - CRUD /api/integrations
   - CRUD /api/custom-labels
   - CRUD /api/roles
+  - CRUD /api/notification-settings
+  - POST /api/auth/signup
+  - POST /api/auth/login
+  - POST /api/sync (protected)
   - GET  /api/export/* (appointments, customers, services, team-members, all)
   `);
 });

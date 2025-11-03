@@ -14,6 +14,21 @@ import FormInfoPage from "@/pages/form-info";
 import ServicesPage from "@/pages/services";
 import CustomersPage from "@/pages/customers";
 import AdminCenterPage from "@/pages/admin";
+import DataAdminPage from "@/pages/admin/DataAdmin";
+import CustomizationsPage from "@/pages/admin/Customizations";
+
+// Wrapper components to handle query parameters
+const DataAdminWrapper = (props: any) => {
+  const searchParams = new URLSearchParams(props.location?.search || '');
+  const section = searchParams.get('section') as 'privacy' | 'domain-auth' | 'export' | undefined;
+  return <DataAdminPage initialSection={section} />;
+};
+
+const CustomizationsWrapper = (props: any) => {
+  const searchParams = new URLSearchParams(props.location?.search || '');
+  const section = searchParams.get('section') as 'custom-domain' | 'in-product' | 'labels' | 'roles' | undefined;
+  return <CustomizationsPage initialSection={section} />;
+};
 import SalespersonsPage from "@/pages/salespersons";
 import PublicBookingPage from "@/pages/public-booking";
 import WorkflowsPage from "@/pages/workflows";
@@ -37,6 +52,8 @@ function Router() {
       <Route path="/dashboard/services" component={ServicesPage} />
       <Route path="/dashboard/customers" component={CustomersPage} />
       <Route path="/dashboard/admin-center" component={AdminCenterPage} />
+      <Route path="/dashboard/admin/data-admin" component={DataAdminWrapper} />
+      <Route path="/dashboard/admin/customizations" component={CustomizationsWrapper} />
       <Route path="/dashboard/salespersons" component={SalespersonsPage} />
       <Route path="/dashboard/account" component={AccountPage} />
       <Route path="/dashboard/subscription" component={SubscriptionPage} />

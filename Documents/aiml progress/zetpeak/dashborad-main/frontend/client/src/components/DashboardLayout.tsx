@@ -100,8 +100,8 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
                 key={item.path}
                 href={item.path}
               >
-                <a
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                <div
+                  className={`flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer ${
                     isActive(item.path)
                       ? 'bg-[#1e3a5f] border-l-4 border-blue-400'
                       : 'hover:bg-gray-800 border-l-4 border-transparent'
@@ -109,7 +109,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
                 >
                   <item.icon size={20} />
                   {sidebarOpen && <span className="font-medium">{item.name}</span>}
-                </a>
+                </div>
               </Link>
             ))}
           </div>
@@ -124,8 +124,8 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
                 key={item.path}
                 href={item.path}
               >
-                <a
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                <div
+                  className={`flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer ${
                     isActive(item.path)
                       ? 'bg-[#1e3a5f] border-l-4 border-blue-400'
                       : 'hover:bg-gray-800 border-l-4 border-transparent'
@@ -133,7 +133,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
                 >
                   <item.icon size={20} />
                   {sidebarOpen && <span className="font-medium">{item.name}</span>}
-                </a>
+                </div>
               </Link>
             ))}
           </div>

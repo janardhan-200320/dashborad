@@ -360,10 +360,42 @@ export default function AdminCenterPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {section.cards.map((card: SettingCard, cardIndex: number) => {
                     const Icon = card.icon;
+                    
+                    // Define navigation logic for Product Customizations cards
+                    const handleCardClick = () => {
+                      if (section.title === 'Product Customizations') {
+                        let sectionParam = '';
+                        switch (card.title) {
+                          case 'Custom Domain':
+                            sectionParam = 'custom-domain';
+                            break;
+                          case 'In-product Notifications':
+                            sectionParam = 'in-product';
+                            break;
+                          case 'Custom Labels':
+                            sectionParam = 'labels';
+                            break;
+                          case 'Roles and Permissions':
+                            sectionParam = 'roles';
+                            break;
+                        }
+                        if (sectionParam) {
+                          setLocation(`/dashboard/admin/customizations?section=${sectionParam}`);
+                        }
+                      } else if (section.title === 'Data Administration') {
+                        if (card.title === 'Export') {
+                          setLocation('/dashboard/admin/data-admin?section=export');
+                        }
+                        // Add navigation for other data admin sections as needed
+                      }
+                      // Add navigation for other sections as needed
+                    };
+                    
                     return (
                       <div 
                         key={cardIndex}
                         className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
+                        onClick={handleCardClick}
                       >
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">

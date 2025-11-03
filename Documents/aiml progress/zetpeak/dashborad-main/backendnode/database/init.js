@@ -197,6 +197,23 @@ export function initDatabase() {
     )
   `);
 
+  // Seed default custom labels
+  const defaultLabels = [
+    ['workspaces', 'Workspace', 'Label for workspace entities'],
+    ['eventType', 'Event Type', 'Label for event/appointment types'],
+    ['user', 'User', 'Label for user/team member entities'],
+    ['resource', 'Resource', 'Label for resource entities'],
+  ];
+
+  const insertLabel = db.prepare(`
+    INSERT OR IGNORE INTO custom_labels (label_type, label_value, description)
+    VALUES (?, ?, ?)
+  `);
+
+  defaultLabels.forEach(([labelType, labelValue, description]) => {
+    insertLabel.run(labelType, labelValue, description);
+  });
+
   // Create roles table
   db.exec(`
     CREATE TABLE IF NOT EXISTS roles (
@@ -204,6 +221,81 @@ export function initDatabase() {
       name TEXT NOT NULL UNIQUE,
       description TEXT,
       permissions TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Seed default roles
+  const defaultRoles = [
+    ['Admin', 'Full access to all features', ['view', 'edit', 'add', 'delete', 'export']],
+    ['Manager', 'Can manage appointments and customers', ['view', 'edit', 'add', 'export']],
+    ['Staff', 'Basic staff access', ['view', 'edit']],
+  ];
+
+  const insertRole = db.prepare(`
+    INSERT OR IGNORE INTO roles (name, description, permissions)
+    VALUES (?, ?, ?)
+  `);
+
+  defaultRoles.forEach(([name, description, permissions]) => {
+    insertRole.run(name, description, JSON.stringify(permissions));
+  });
+
+  // Create notification_settings table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      is_enabled BOOLEAN DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(entity_type, event_type)
+    )
+  `);
+
+  // Seed default notification settings
+  const defaultNotifications = [
+    // Appointments
+    ['appointment', 'scheduled', 1],
+    ['appointment', 'canceled', 1],
+    ['appointment', 'rescheduled', 1],
+    // Recruiters
+    ['recruiter', 'created', 1],
+    ['recruiter', 'edited', 1],
+    ['recruiter', 'deleted', 1],
+    ['recruiter', 'on leave', 0],
+    // Interviews
+    ['interview', 'created', 1],
+    ['interview', 'edited', 1],
+    ['interview', 'deleted', 1],
+    // Customers
+    ['customer', 'created', 1],
+    ['customer', 'edited', 1],
+    ['customer', 'deleted', 1],
+    // Payments
+    ['payment', 'success', 1],
+    ['payment', 'failure', 1],
+  ];
+
+  const insertNotification = db.prepare(`
+    INSERT OR IGNORE INTO notification_settings (entity_type, event_type, is_enabled)
+    VALUES (?, ?, ?)
+  `);
+
+  defaultNotifications.forEach(([entityType, eventType, isEnabled]) => {
+    insertNotification.run(entityType, eventType, isEnabled);
+  });
+
+  // Create users table (for login/signup)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT,
+      session_token TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
