@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { HelpCircle, Share2, Palette, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface SalesCall {
   id: string;
@@ -22,9 +23,21 @@ interface Salesperson {
 
 export default function BookingPagesPage() {
   const { toast } = useToast();
+  const { selectedWorkspace } = useWorkspace();
   const [company, setCompany] = useState<any>(null);
   const [searchSalesCalls, setSearchSalesCalls] = useState('');
   const [searchSalespersons, setSearchSalespersons] = useState('');
+  const [salesCalls, setSalesCalls] = useState<SalesCall[]>([]);
+  const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
+
+  // Compute workspace-scoped storage keys
+  const salesCallsStorageKey = useMemo(() => {
+    return selectedWorkspace ? `zervos_sales_calls::${selectedWorkspace.id}` : null;
+  }, [selectedWorkspace]);
+
+  const teamMembersStorageKey = useMemo(() => {
+    return selectedWorkspace ? `zervos_team_members::${selectedWorkspace.id}` : null;
+  }, [selectedWorkspace]);
 
   useEffect(() => {
     try {
@@ -33,27 +46,53 @@ export default function BookingPagesPage() {
     } catch {}
   }, []);
 
+  // Load sales calls (sessions) from workspace
+  useEffect(() => {
+    if (!salesCallsStorageKey) {
+      setSalesCalls([]);
+      return;
+    }
+    try {
+      const savedCalls = localStorage.getItem(salesCallsStorageKey);
+      if (savedCalls) {
+        const calls = JSON.parse(savedCalls);
+        setSalesCalls(calls.map((call: any) => ({
+          id: call.id,
+          name: call.name,
+          duration: call.action || '30 mins',
+          type: call.bookingType || call.trigger || 'One-on-One',
+          color: 'bg-green-100 text-green-700'
+        })));
+      } else {
+        setSalesCalls([]);
+      }
+    } catch {}
+  }, [salesCallsStorageKey]);
+
+  // Load team members (salespersons) from workspace
+  useEffect(() => {
+    if (!teamMembersStorageKey) {
+      setSalespersons([]);
+      return;
+    }
+    try {
+      const savedMembers = localStorage.getItem(teamMembersStorageKey);
+      if (savedMembers) {
+        const members = JSON.parse(savedMembers);
+        setSalespersons(members.map((member: any) => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          avatar: member.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+        })));
+      } else {
+        setSalespersons([]);
+      }
+    } catch {}
+  }, [teamMembersStorageKey]);
+
   const eventTypeLabel = company?.eventTypeLabel || 'Sales Calls';
   const teamMemberLabel = company?.teamMemberLabel || 'Salespersons';
-
-  const [salesCalls] = useState<SalesCall[]>([
-    {
-      id: '1',
-      name: 'Lead Qualification Session',
-      duration: '30 mins',
-      type: 'One-on-One',
-      color: 'bg-green-100 text-green-700'
-    },
-  ]);
-
-  const [salespersons] = useState<Salesperson[]>([
-    {
-      id: '1',
-      name: 'Bharath Reddy',
-      email: 'bharathreddyn6@gmail.com',
-      avatar: 'BH'
-    },
-  ]);
 
   const workspaceName = company?.name || 'bharath';
 
@@ -74,6 +113,15 @@ export default function BookingPagesPage() {
             <HelpCircle size={20} className="text-gray-400 cursor-pointer hover:text-gray-600" />
           </div>
         </div>
+
+        {/* Workspace guard */}
+        {!selectedWorkspace && (
+          <div className="p-6 max-w-7xl mx-auto">
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+              Please select a workspace from the "My Space" dropdown to view booking pages.
+            </div>
+          </div>
+        )}
 
         <div className="p-6 space-y-6 max-w-7xl mx-auto">
           {/* Workspace Card */}
