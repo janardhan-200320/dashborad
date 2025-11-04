@@ -5,6 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+
+// Types
+interface SettingCard {
+  icon: any;
+  title: string;
+  options: string[];
+}
+
+interface SettingSection {
+  title: string;
+  cards: SettingCard[];
+}
 import { 
   ArrowLeft, 
   Search, 
@@ -86,6 +98,7 @@ interface Integration {
 
 export default function AdminCenterPage() {
   const [, setLocation] = useLocation();
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('organization');
   const { toast } = useToast();
   

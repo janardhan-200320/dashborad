@@ -13,7 +13,8 @@ import {
   LogOut,
   PhoneCall,
   LayoutGrid,
-  Clock3
+  Clock3,
+  Briefcase
 } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
 
@@ -32,12 +33,37 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [company, setCompany] = useState<Company | null>(null);
+  const [orgLogo, setOrgLogo] = useState<string>('');
 
   useEffect(() => {
     const savedCompany = localStorage.getItem('zervos_company');
     if (savedCompany) {
       setCompany(JSON.parse(savedCompany));
     }
+
+    // Load organization settings for logo
+    const loadOrgSettings = () => {
+      const orgSettings = localStorage.getItem('zervos_organization_settings');
+      if (orgSettings) {
+        const settings = JSON.parse(orgSettings);
+        setOrgLogo(settings.logo || '');
+      }
+    };
+
+    loadOrgSettings();
+
+    // Listen for organization settings updates
+    const handleSettingsUpdate = (event: CustomEvent) => {
+      if (event.detail?.logo) {
+        setOrgLogo(event.detail.logo);
+      }
+    };
+
+    window.addEventListener('organization-settings-updated', handleSettingsUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('organization-settings-updated', handleSettingsUpdate as EventListener);
+    };
   }, []);
 
   // Use dynamic labels from company profile
@@ -73,7 +99,17 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
         <div className="p-4 border-b border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Building2 size={24} />
+              {orgLogo ? (
+                <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
+                  <img 
+                    src={orgLogo} 
+                    alt="Logo" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <Building2 size={24} />
+              )}
               {sidebarOpen && (
                 <div>
                   <h1 className="font-bold text-lg">Zervos</h1>
@@ -177,7 +213,17 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             <div className="flex items-center gap-4">
               {company && (
                 <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-gray-100 rounded-lg">
-                  <Building2 size={18} className="text-gray-600" />
+                  {orgLogo ? (
+                    <div className="w-8 h-8 rounded-md overflow-hidden bg-white flex-shrink-0">
+                      <img 
+                        src={orgLogo} 
+                        alt="Logo" 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <Building2 size={18} className="text-gray-600" />
+                  )}
                   <div>
                     <p className="text-sm font-medium text-gray-900">{company.name}</p>
                     <p className="text-xs text-gray-500">{company.industry}</p>

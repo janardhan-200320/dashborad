@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Onboarding, type InsertOnboarding } from "@shared/schema";
+import { type User, type InsertUser, type Onboarding, type InsertOnboarding, type Resource, type InsertResource, type ResourceBooking, type InsertResourceBooking } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -8,15 +8,33 @@ export interface IStorage {
   createOnboarding(onboarding: InsertOnboarding): Promise<Onboarding>;
   getOnboarding(id: string): Promise<Onboarding | undefined>;
   getAllOnboardings(): Promise<Onboarding[]>;
+  
+  // Resource methods
+  createResource(resource: InsertResource): Promise<Resource>;
+  getResource(id: string): Promise<Resource | undefined>;
+  getAllResources(filters?: { type?: string; status?: string; search?: string }): Promise<Resource[]>;
+  updateResource(id: string, resource: InsertResource): Promise<Resource | undefined>;
+  deleteResource(id: string): Promise<void>;
+  
+  // Resource booking methods
+  createResourceBooking(booking: InsertResourceBooking): Promise<ResourceBooking>;
+  getResourceBookings(filters?: { resourceId?: string; startDate?: string; endDate?: string }): Promise<ResourceBooking[]>;
+  checkResourceAvailability(resourceId: string, startTime: string, endTime: string): Promise<boolean>;
+  cancelResourceBooking(id: string): Promise<ResourceBooking | undefined>;
+  getResourceStats(resourceId: string, startDate?: string, endDate?: string): Promise<any>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private onboardings: Map<string, Onboarding>;
+  private resources: Map<string, Resource>;
+  private resourceBookings: Map<string, ResourceBooking>;
 
   constructor() {
     this.users = new Map();
     this.onboardings = new Map();
+    this.resources = new Map();
+    this.resourceBookings = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -49,6 +67,215 @@ export class MemStorage implements IStorage {
 
   async getAllOnboardings(): Promise<Onboarding[]> {
     return Array.from(this.onboardings.values());
+  }
+
+  // ========== RESOURCE METHODS ==========
+
+  async createResource(insertResource: InsertResource): Promise<Resource> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const resource: Resource = {
+      ...insertResource,
+      id,
+      status: insertResource.status || 'available',
+      description: insertResource.description || null,
+      capacity: insertResource.capacity || null,
+      assignedUsers: insertResource.assignedUsers || null,
+      availabilitySchedule: insertResource.availabilitySchedule || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.resources.set(id, resource);
+    return resource;
+  }
+
+  async getResource(id: string): Promise<Resource | undefined> {
+    return this.resources.get(id);
+  }
+
+  async getAllResources(filters?: { 
+    type?: string; 
+    status?: string; 
+    search?: string 
+  }): Promise<Resource[]> {
+    let resources = Array.from(this.resources.values());
+
+    if (filters?.type) {
+      resources = resources.filter(r => r.type === filters.type);
+    }
+
+    if (filters?.status) {
+      resources = resources.filter(r => r.status === filters.status);
+    }
+
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      resources = resources.filter(r => 
+        r.name.toLowerCase().includes(searchLower) ||
+        r.description?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return resources;
+  }
+
+  async updateResource(id: string, insertResource: InsertResource): Promise<Resource | undefined> {
+    const existing = this.resources.get(id);
+    if (!existing) {
+      return undefined;
+    }
+
+    const updated: Resource = {
+      ...existing,
+      ...insertResource,
+      id,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.resources.set(id, updated);
+    return updated;
+  }
+
+  async deleteResource(id: string): Promise<void> {
+    this.resources.delete(id);
+    // Also delete associated bookings
+    const bookingsToDelete = Array.from(this.resourceBookings.entries())
+      .filter(([, booking]) => booking.resourceId === id)
+      .map(([bookingId]) => bookingId);
+    
+    bookingsToDelete.forEach(bookingId => this.resourceBookings.delete(bookingId));
+  }
+
+  // ========== RESOURCE BOOKING METHODS ==========
+
+  async createResourceBooking(insertBooking: InsertResourceBooking): Promise<ResourceBooking> {
+    const id = randomUUID();
+    const booking: ResourceBooking = {
+      ...insertBooking,
+      id,
+      status: insertBooking.status || 'confirmed',
+      notes: insertBooking.notes || null,
+      createdAt: new Date().toISOString(),
+    };
+    this.resourceBookings.set(id, booking);
+    return booking;
+  }
+
+  async getResourceBookings(filters?: {
+    resourceId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ResourceBooking[]> {
+    let bookings = Array.from(this.resourceBookings.values());
+
+    if (filters?.resourceId) {
+      bookings = bookings.filter(b => b.resourceId === filters.resourceId);
+    }
+
+    if (filters?.startDate && filters?.endDate) {
+      bookings = bookings.filter(b => {
+        const bookingStart = new Date(b.startTime);
+        const bookingEnd = new Date(b.endTime);
+        const filterStart = new Date(filters.startDate!);
+        const filterEnd = new Date(filters.endDate!);
+        
+        return (bookingStart >= filterStart && bookingStart <= filterEnd) ||
+               (bookingEnd >= filterStart && bookingEnd <= filterEnd) ||
+               (bookingStart <= filterStart && bookingEnd >= filterEnd);
+      });
+    }
+
+    return bookings.filter(b => b.status !== 'cancelled');
+  }
+
+  async checkResourceAvailability(
+    resourceId: string,
+    startTime: string,
+    endTime: string
+  ): Promise<boolean> {
+    const resource = await this.getResource(resourceId);
+    if (!resource) {
+      return false;
+    }
+
+    // Check if resource is under maintenance
+    if (resource.status === 'under_maintenance') {
+      return false;
+    }
+
+    // Check for overlapping bookings
+    const bookings = await this.getResourceBookings({ resourceId });
+    const requestStart = new Date(startTime);
+    const requestEnd = new Date(endTime);
+
+    const hasConflict = bookings.some(booking => {
+      const bookingStart = new Date(booking.startTime);
+      const bookingEnd = new Date(booking.endTime);
+
+      return (
+        (requestStart >= bookingStart && requestStart < bookingEnd) ||
+        (requestEnd > bookingStart && requestEnd <= bookingEnd) ||
+        (requestStart <= bookingStart && requestEnd >= bookingEnd)
+      );
+    });
+
+    return !hasConflict;
+  }
+
+  async cancelResourceBooking(id: string): Promise<ResourceBooking | undefined> {
+    const booking = this.resourceBookings.get(id);
+    if (!booking) {
+      return undefined;
+    }
+
+    const cancelled: ResourceBooking = {
+      ...booking,
+      status: 'cancelled',
+    };
+
+    this.resourceBookings.set(id, cancelled);
+    return cancelled;
+  }
+
+  async getResourceStats(
+    resourceId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<any> {
+    const bookings = await this.getResourceBookings({
+      resourceId,
+      startDate,
+      endDate,
+    });
+
+    const totalBookings = bookings.length;
+    const totalHours = bookings.reduce((sum, booking) => {
+      const start = new Date(booking.startTime);
+      const end = new Date(booking.endTime);
+      const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      return sum + hours;
+    }, 0);
+
+    // Calculate utilization percentage (assuming 8 hours per day)
+    const daysInPeriod = startDate && endDate
+      ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))
+      : 30; // Default to 30 days if no range provided
+
+    const availableHours = daysInPeriod * 8; // 8 hours per day
+    const utilizationPercentage = availableHours > 0
+      ? (totalHours / availableHours) * 100
+      : 0;
+
+    return {
+      resourceId,
+      totalBookings,
+      totalHours: Math.round(totalHours * 100) / 100,
+      utilizationPercentage: Math.round(utilizationPercentage * 100) / 100,
+      period: {
+        startDate: startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        endDate: endDate || new Date().toISOString(),
+      },
+    };
   }
 }
 

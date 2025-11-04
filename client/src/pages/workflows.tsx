@@ -68,16 +68,16 @@ interface WorkflowAction {
     // Webhook config
     url?: string;
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-    headers?: Record<string, string>;
+    headers?: Record<string, string> | string;
     payload?: string;
       
     // Calendar config
     eventTitle?: string;
     eventDate?: string;
-    duration?: number;
+    duration?: number | string;
     
     // Wait config
-    delayAmount?: number;
+    delayAmount?: number | string;
     delayUnit?: 'minutes' | 'hours' | 'days';
     
     // Condition config
@@ -93,6 +93,10 @@ interface WorkflowAction {
     
     // Tag config
     tagName?: string;
+    
+    // Retry config
+    retryOnFailure?: boolean;
+    retryAttempts?: number;
   };
   order: number;
 }
@@ -114,6 +118,7 @@ interface WorkflowLog {
   triggeredBy: string;
   actions: {
     actionId: string;
+    actionName?: string;
     status: 'success' | 'failed' | 'skipped';
     error?: string;
   }[];
@@ -337,17 +342,21 @@ export default function WorkflowsPage() {
   };
 
   const handleCreateWorkflow = () => {
+    const now = new Date().toISOString();
     const workflow: Workflow = {
       id: Date.now().toString(),
       name: newWorkflow.name,
       description: newWorkflow.description,
+      version: 1,
       trigger: {
         type: newWorkflow.trigger as any,
         label: triggerLabels[newWorkflow.trigger as keyof typeof triggerLabels]
       },
       actions: [],
       isActive: false,
-      executionCount: 0
+      executionCount: 0,
+      createdAt: now,
+      updatedAt: now
     };
     
     const updated = [...workflows, workflow];
@@ -558,7 +567,7 @@ export default function WorkflowsPage() {
     toast({ title: "Workflow created from template" });
   };
 
-  const insertVariable = (variable: string, field: 'subject' | 'body' | 'message') => {
+  const insertVariable = (variable: string, field: 'subject' | 'body' | 'message' | 'to' | 'phoneNumber') => {
     if (!editingAction) return;
     
     const currentValue = editingAction.config[field] || '';
@@ -1159,7 +1168,7 @@ export default function WorkflowsPage() {
                         </div>
                         <p className="text-xs text-gray-500 mb-3">{template.description}</p>
                         <div className="flex items-center gap-2 text-xs text-gray-400">
-                          <span>{template.workflow.actions.length} actions</span>
+                          <span>{template.workflow.actions?.length || 0} actions</span>
                           <span>•</span>
                           <span>{template.workflow.conditions?.length || 0} conditions</span>
                         </div>
@@ -1268,17 +1277,20 @@ export default function WorkflowsPage() {
                         <div className="flex flex-wrap gap-1 mt-2">
                           {Object.entries(variables).map(([category, vars]) => (
                             <div key={category} className="flex gap-1">
-                              {Object.keys(vars).slice(0, 2).map((varKey) => (
-                                <Button
-                                  key={varKey}
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-xs"
-                                  onClick={() => insertVariable(vars[varKey as keyof typeof vars], 'body')}
-                                >
-                                  {vars[varKey as keyof typeof vars]}
-                                </Button>
-                              ))}
+                              {Object.keys(vars).slice(0, 2).map((varKey) => {
+                                const varValue = String(vars[varKey as keyof typeof vars]);
+                                return (
+                                  <Button
+                                    key={varKey}
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => insertVariable(varValue, 'body')}
+                                  >
+                                    {varValue}
+                                  </Button>
+                                );
+                              })}
                             </div>
                           ))}
                         </div>
@@ -1374,7 +1386,7 @@ export default function WorkflowsPage() {
                           value={editingAction.config?.method || 'POST'}
                           onValueChange={(value) => setEditingAction({
                             ...editingAction,
-                            config: { ...editingAction.config, method: value }
+                            config: { ...editingAction.config, method: value as 'GET' | 'POST' | 'PUT' | 'DELETE' }
                           })}
                         >
                           <option value="GET">GET</option>
@@ -1387,7 +1399,7 @@ export default function WorkflowsPage() {
                       <div>
                         <Label>Headers (JSON)</Label>
                         <Textarea
-                          value={editingAction.config?.headers || ''}
+                          value={typeof editingAction.config?.headers === 'string' ? editingAction.config.headers : JSON.stringify(editingAction.config?.headers || {})}
                           onChange={(e) => setEditingAction({
                             ...editingAction,
                             config: { ...editingAction.config, headers: e.target.value }
@@ -1432,7 +1444,7 @@ export default function WorkflowsPage() {
                           value={editingAction.config?.delayUnit || 'minutes'}
                           onValueChange={(value) => setEditingAction({
                             ...editingAction,
-                            config: { ...editingAction.config, delayUnit: value }
+                            config: { ...editingAction.config, delayUnit: value as 'minutes' | 'hours' | 'days' }
                           })}
                         >
                           <option value="minutes">Minutes</option>
@@ -1492,7 +1504,7 @@ export default function WorkflowsPage() {
                           value={editingAction.config?.crmSystem || ''}
                           onValueChange={(value) => setEditingAction({
                             ...editingAction,
-                            config: { ...editingAction.config, crmSystem: value }
+                            config: { ...editingAction.config, crmSystem: value as 'salesforce' | 'hubspot' | 'zoho' }
                           })}
                         >
                           <option value="salesforce">Salesforce</option>
@@ -1507,7 +1519,7 @@ export default function WorkflowsPage() {
                           value={editingAction.config?.action || ''}
                           onValueChange={(value) => setEditingAction({
                             ...editingAction,
-                            config: { ...editingAction.config, action: value }
+                            config: { ...editingAction.config, action: value as 'create_contact' | 'update_contact' | 'create_deal' }
                           })}
                         >
                           <option value="create_contact">Create Contact</option>

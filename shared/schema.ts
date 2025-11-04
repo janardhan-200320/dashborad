@@ -24,6 +24,30 @@ export const onboarding = pgTable("onboarding", {
   teamMemberLabel: text("team_member_label").notNull(),
 });
 
+export const resources = pgTable("resources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").notNull(), // Room, Equipment, Zoom Account, Vehicle, Other
+  description: text("description"),
+  status: text("status").notNull().default("available"), // available, under_maintenance, booked
+  capacity: text("capacity"), // Optional number field stored as text
+  assignedUsers: text("assigned_users").array().default(sql`'{}'`), // Array of user IDs
+  availabilitySchedule: jsonb("availability_schedule"), // [{day: string, startTime: string, endTime: string}]
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const resourceBookings = pgTable("resource_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resourceId: varchar("resource_id").notNull().references(() => resources.id, { onDelete: "cascade" }),
+  bookedBy: varchar("booked_by").notNull(), // User ID or name
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  status: text("status").notNull().default("confirmed"), // confirmed, cancelled
+  notes: text("notes"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -33,7 +57,22 @@ export const insertOnboardingSchema = createInsertSchema(onboarding).omit({
   id: true,
 });
 
+export const insertResourceSchema = createInsertSchema(resources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertResourceBookingSchema = createInsertSchema(resourceBookings).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertOnboarding = z.infer<typeof insertOnboardingSchema>;
 export type Onboarding = typeof onboarding.$inferSelect;
+export type InsertResource = z.infer<typeof insertResourceSchema>;
+export type Resource = typeof resources.$inferSelect;
+export type InsertResourceBooking = z.infer<typeof insertResourceBookingSchema>;
+export type ResourceBooking = typeof resourceBookings.$inferSelect;

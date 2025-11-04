@@ -4,9 +4,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Users, Edit, Trash2, Mail, Phone, Briefcase } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Search, Plus, Users, Edit, Trash2, Mail, Phone, Briefcase, Upload, Calendar, Award, Copy, Eye, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+
+interface Permission {
+  module: string;
+  canView: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+interface AvailabilitySchedule {
+  day: string;
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+}
 
 interface Salesperson {
   id: string;
@@ -15,17 +33,56 @@ interface Salesperson {
   phone?: string;
   role: 'Super Admin' | 'Admin' | 'Staff' | 'Manager';
   workspace: string;
-  status: 'Active' | 'Inactive';
+  status: 'Active' | 'Inactive' | 'On Leave';
   availability?: string;
   workload?: string;
+  profilePicture?: string;
+  permissions?: Permission[];
+  availabilitySchedule?: AvailabilitySchedule[];
+  timezone?: string;
+  totalBookings?: number;
+  averageRating?: number;
+  bookingLink?: string;
+  notes?: string;
 }
+
+// Default permissions template
+const DEFAULT_PERMISSIONS: Permission[] = [
+  { module: 'Dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: false },
+  { module: 'Customers', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Services', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Reports', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Settings', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Workflows', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Team', canView: false, canCreate: false, canEdit: false, canDelete: false },
+];
+
+// Default weekly schedule
+const DEFAULT_SCHEDULE: AvailabilitySchedule[] = [
+  { day: 'Monday', enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 'Tuesday', enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 'Wednesday', enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 'Thursday', enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 'Friday', enabled: true, startTime: '09:00', endTime: '17:00' },
+  { day: 'Saturday', enabled: false, startTime: '09:00', endTime: '17:00' },
+  { day: 'Sunday', enabled: false, startTime: '09:00', endTime: '17:00' },
+];
+
+// Helper function to generate booking link
+const generateBookingLink = (name: string, id: string): string => {
+  const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  return `/book/team/${slug}-${id}`;
+};
 
 export default function Salespersons() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Salesperson | null>(null);
+  const [viewingPerson, setViewingPerson] = useState<Salesperson | null>(null);
   
   const [salespersons, setSalespersons] = useState<Salesperson[]>([
     {
@@ -49,7 +106,14 @@ export default function Salespersons() {
     workspace: 'bharath',
     status: 'Active',
     availability: 'Full Time',
-    workload: 'Low'
+    workload: 'Low',
+    profilePicture: '',
+    permissions: [...DEFAULT_PERMISSIONS],
+    availabilitySchedule: [...DEFAULT_SCHEDULE],
+    timezone: 'Asia/Kolkata',
+    totalBookings: 0,
+    averageRating: 0,
+    notes: '',
   });
 
   useEffect(() => {
@@ -65,9 +129,11 @@ export default function Salespersons() {
   };
 
   const handleAddPerson = () => {
+    const id = Date.now().toString();
     const person: Salesperson = {
-      id: Date.now().toString(),
-      ...newPerson
+      id,
+      ...newPerson,
+      bookingLink: generateBookingLink(newPerson.name, id),
     };
     const updated = [...salespersons, person];
     saveToLocalStorage(updated);
@@ -80,11 +146,18 @@ export default function Salespersons() {
       workspace: 'bharath',
       status: 'Active',
       availability: 'Full Time',
-      workload: 'Low'
+      workload: 'Low',
+      profilePicture: '',
+      permissions: [...DEFAULT_PERMISSIONS],
+      availabilitySchedule: [...DEFAULT_SCHEDULE],
+      timezone: 'Asia/Kolkata',
+      totalBookings: 0,
+      averageRating: 0,
+      notes: '',
     });
     toast({
       title: "Success",
-      description: "Salesperson added successfully",
+      description: "Team member added successfully",
     });
   };
 
@@ -110,13 +183,44 @@ export default function Salespersons() {
   };
 
   const handleToggleStatus = (id: string) => {
+    const person = salespersons.find(p => p.id === id);
+    if (!person) return;
+    
+    const statuses: ('Active' | 'Inactive' | 'On Leave')[] = ['Active', 'Inactive', 'On Leave'];
+    const currentIndex = statuses.indexOf(person.status);
+    const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+    
     const updated = salespersons.map(p => 
-      p.id === id ? { ...p, status: (p.status === 'Active' ? 'Inactive' : 'Active') as 'Active' | 'Inactive' } : p
+      p.id === id ? { ...p, status: nextStatus } : p
     );
     saveToLocalStorage(updated);
     toast({
       title: "Success",
       description: "Status updated",
+    });
+  };
+
+  const handleProfilePictureUpload = (e: React.ChangeEvent<HTMLInputElement>, isEditing: boolean = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      if (isEditing && editingPerson) {
+        setEditingPerson({ ...editingPerson, profilePicture: base64String });
+      } else {
+        setNewPerson({ ...newPerson, profilePicture: base64String });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCopyBookingLink = (link: string) => {
+    navigator.clipboard.writeText(window.location.origin + link);
+    toast({
+      title: "Success",
+      description: "Booking link copied to clipboard",
     });
   };
 
@@ -189,12 +293,23 @@ export default function Salespersons() {
               <tr key={person.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                      {person.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                    </div>
+                    {person.profilePicture ? (
+                      <img src={person.profilePicture} alt={person.name} className="w-10 h-10 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {person.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </div>
+                    )}
                     <div>
                       <div className="font-medium text-gray-900">{person.name}</div>
-                      <div className="text-xs text-gray-500">{person.workload || 'Medium'} workload</div>
+                      <div className="text-xs text-gray-500 flex items-center gap-2">
+                        {person.totalBookings !== undefined && (
+                          <span>{person.totalBookings} bookings</span>
+                        )}
+                        {person.averageRating !== undefined && person.averageRating > 0 && (
+                          <span>⭐ {person.averageRating.toFixed(1)}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -239,15 +354,31 @@ export default function Salespersons() {
                     onClick={() => handleToggleStatus(person.id)}
                     className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                   >
-                    <div className={`w-2 h-2 rounded-full ${person.status === 'Active' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                    <div className={`w-2 h-2 rounded-full ${
+                      person.status === 'Active' ? 'bg-green-500' : 
+                      person.status === 'On Leave' ? 'bg-yellow-500' : 
+                      'bg-gray-400'
+                    }`}></div>
                     <span className="text-sm text-gray-900">{person.status}</span>
                   </button>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <Button 
                       variant="ghost" 
                       size="sm"
+                      title="View Details"
+                      onClick={() => {
+                        setViewingPerson(person);
+                        setViewDetailsOpen(true);
+                      }}
+                    >
+                      <Eye size={16} />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      title="Edit"
                       onClick={() => {
                         setEditingPerson(person);
                         setEditModalOpen(true);
@@ -255,9 +386,20 @@ export default function Salespersons() {
                     >
                       <Edit size={16} />
                     </Button>
+                    {person.bookingLink && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        title="Copy Booking Link"
+                        onClick={() => handleCopyBookingLink(person.bookingLink!)}
+                      >
+                        <Copy size={16} />
+                      </Button>
+                    )}
                     <Button 
                       variant="ghost" 
                       size="sm"
+                      title="Delete"
                       onClick={() => handleDeletePerson(person.id)}
                     >
                       <Trash2 size={16} className="text-red-500" />
@@ -288,176 +430,483 @@ export default function Salespersons() {
 
       {/* Add Modal */}
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add New Salesperson</DialogTitle>
-            <DialogDescription>Add a new team member to your organization</DialogDescription>
+            <DialogTitle>Add New Team Member</DialogTitle>
+            <DialogDescription>Add a new team member with permissions and availability</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="col-span-2">
-              <Label>Full Name *</Label>
-              <Input
-                value={newPerson.name}
-                onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                placeholder="John Doe"
-              />
-            </div>
-            <div>
-              <Label>Email Address *</Label>
-              <Input
-                type="email"
-                value={newPerson.email}
-                onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                placeholder="john@example.com"
-              />
-            </div>
-            <div>
-              <Label>Phone Number</Label>
-              <Input
-                type="tel"
-                value={newPerson.phone}
-                onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
-                placeholder="+1 (555) 123-4567"
-              />
-            </div>
-            <div>
-              <Label>Role *</Label>
-              <Select value={newPerson.role} onValueChange={(value: any) => setNewPerson({ ...newPerson, role: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Staff">Staff</SelectItem>
-                  <SelectItem value="Manager">Manager</SelectItem>
-                  <SelectItem value="Admin">Admin</SelectItem>
-                  <SelectItem value="Super Admin">Super Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Workspace</Label>
-              <Input
-                value={newPerson.workspace}
-                onChange={(e) => setNewPerson({ ...newPerson, workspace: e.target.value })}
-                placeholder="bharath"
-              />
-            </div>
-            <div>
-              <Label>Availability</Label>
-              <Select value={newPerson.availability} onValueChange={(value: any) => setNewPerson({ ...newPerson, availability: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Full Time">Full Time</SelectItem>
-                  <SelectItem value="Part Time">Part Time</SelectItem>
-                  <SelectItem value="Contract">Contract</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Workload</Label>
-              <Select value={newPerson.workload} onValueChange={(value: any) => setNewPerson({ ...newPerson, workload: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Low">Low</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          
+          <Tabs defaultValue="basic" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="basic">Basic Info</TabsTrigger>
+              <TabsTrigger value="availability">Availability</TabsTrigger>
+              <TabsTrigger value="permissions">Permissions</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="basic" className="space-y-4">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                  {newPerson.profilePicture ? (
+                    <img src={newPerson.profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <Upload className="text-gray-400" size={32} />
+                  )}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => document.getElementById('add-profile-upload')?.click()}>
+                  Upload Photo
+                </Button>
+                <input
+                  id="add-profile-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleProfilePictureUpload(e, false)}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>Full Name *</Label>
+                  <Input
+                    value={newPerson.name}
+                    onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div>
+                  <Label>Email Address *</Label>
+                  <Input
+                    type="email"
+                    value={newPerson.email}
+                    onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
+                    placeholder="john@example.com"
+                  />
+                </div>
+                <div>
+                  <Label>Phone Number</Label>
+                  <Input
+                    type="tel"
+                    value={newPerson.phone}
+                    onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
+                    placeholder="+1 (555) 123-4567"
+                  />
+                </div>
+                <div>
+                  <Label>Role *</Label>
+                  <Select value={newPerson.role} onValueChange={(value: any) => setNewPerson({ ...newPerson, role: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Staff">Staff</SelectItem>
+                      <SelectItem value="Manager">Manager</SelectItem>
+                      <SelectItem value="Admin">Admin</SelectItem>
+                      <SelectItem value="Super Admin">Super Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Timezone</Label>
+                  <Select value={newPerson.timezone} onValueChange={(value: any) => setNewPerson({ ...newPerson, timezone: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Asia/Kolkata">Asia/Kolkata</SelectItem>
+                      <SelectItem value="America/New_York">America/New_York</SelectItem>
+                      <SelectItem value="Europe/London">Europe/London</SelectItem>
+                      <SelectItem value="Asia/Tokyo">Asia/Tokyo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Workspace</Label>
+                  <Input
+                    value={newPerson.workspace}
+                    onChange={(e) => setNewPerson({ ...newPerson, workspace: e.target.value })}
+                    placeholder="bharath"
+                  />
+                </div>
+                <div>
+                  <Label>Availability Type</Label>
+                  <Select value={newPerson.availability} onValueChange={(value: any) => setNewPerson({ ...newPerson, availability: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Full Time">Full Time</SelectItem>
+                      <SelectItem value="Part Time">Part Time</SelectItem>
+                      <SelectItem value="Contract">Contract</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={newPerson.notes}
+                    onChange={(e) => setNewPerson({ ...newPerson, notes: e.target.value })}
+                    placeholder="Additional notes about this team member..."
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="availability" className="space-y-4">
+              <p className="text-sm text-gray-500 mb-4">Set weekly working hours for this team member</p>
+              {newPerson.availabilitySchedule?.map((schedule, index) => (
+                <div key={schedule.day} className="flex items-center gap-4 p-3 border rounded-lg">
+                  <div className="flex items-center gap-2 w-32">
+                    <Switch
+                      checked={schedule.enabled}
+                      onCheckedChange={(checked) => {
+                        const updated = [...(newPerson.availabilitySchedule || [])];
+                        updated[index].enabled = checked;
+                        setNewPerson({ ...newPerson, availabilitySchedule: updated });
+                      }}
+                    />
+                    <Label className="font-medium">{schedule.day}</Label>
+                  </div>
+                  {schedule.enabled && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="time"
+                          value={schedule.startTime}
+                          onChange={(e) => {
+                            const updated = [...(newPerson.availabilitySchedule || [])];
+                            updated[index].startTime = e.target.value;
+                            setNewPerson({ ...newPerson, availabilitySchedule: updated });
+                          }}
+                          className="w-32"
+                        />
+                        <span className="text-gray-500">to</span>
+                        <Input
+                          type="time"
+                          value={schedule.endTime}
+                          onChange={(e) => {
+                            const updated = [...(newPerson.availabilitySchedule || [])];
+                            updated[index].endTime = e.target.value;
+                            setNewPerson({ ...newPerson, availabilitySchedule: updated });
+                          }}
+                          className="w-32"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </TabsContent>
+
+            <TabsContent value="permissions" className="space-y-4">
+              <p className="text-sm text-gray-500 mb-4">Configure module access permissions</p>
+              <div className="space-y-2">
+                {newPerson.permissions?.map((perm, index) => (
+                  <div key={perm.module} className="border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Shield size={16} className="text-indigo-600" />
+                      <span className="font-medium">{perm.module}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3 ml-6">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={perm.canView}
+                          onCheckedChange={(checked) => {
+                            const updated = [...(newPerson.permissions || [])];
+                            updated[index].canView = checked;
+                            setNewPerson({ ...newPerson, permissions: updated });
+                          }}
+                        />
+                        <Label className="text-sm">View</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={perm.canCreate}
+                          onCheckedChange={(checked) => {
+                            const updated = [...(newPerson.permissions || [])];
+                            updated[index].canCreate = checked;
+                            setNewPerson({ ...newPerson, permissions: updated });
+                          }}
+                        />
+                        <Label className="text-sm">Create</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={perm.canEdit}
+                          onCheckedChange={(checked) => {
+                            const updated = [...(newPerson.permissions || [])];
+                            updated[index].canEdit = checked;
+                            setNewPerson({ ...newPerson, permissions: updated });
+                          }}
+                        />
+                        <Label className="text-sm">Edit</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={perm.canDelete}
+                          onCheckedChange={(checked) => {
+                            const updated = [...(newPerson.permissions || [])];
+                            updated[index].canDelete = checked;
+                            setNewPerson({ ...newPerson, permissions: updated });
+                          }}
+                        />
+                        <Label className="text-sm">Delete</Label>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddModalOpen(false)}>Cancel</Button>
             <Button onClick={handleAddPerson} disabled={!newPerson.name || !newPerson.email}>
-              Add Salesperson
+              Add Team Member
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Modal */}
+      {/* Edit Modal - Similar to Add but with existing data */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Salesperson</DialogTitle>
-            <DialogDescription>Update team member information</DialogDescription>
+            <DialogTitle>Edit Team Member</DialogTitle>
+            <DialogDescription>Update team member information, permissions, and availability</DialogDescription>
           </DialogHeader>
           {editingPerson && (
-            <div className="grid grid-cols-2 gap-4 py-4">
-              <div className="col-span-2">
-                <Label>Full Name *</Label>
-                <Input
-                  value={editingPerson.name}
-                  onChange={(e) => setEditingPerson({ ...editingPerson, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Email Address *</Label>
-                <Input
-                  type="email"
-                  value={editingPerson.email}
-                  onChange={(e) => setEditingPerson({ ...editingPerson, email: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Phone Number</Label>
-                <Input
-                  type="tel"
-                  value={editingPerson.phone || ''}
-                  onChange={(e) => setEditingPerson({ ...editingPerson, phone: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Role *</Label>
-                <Select value={editingPerson.role} onValueChange={(value: any) => setEditingPerson({ ...editingPerson, role: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Staff">Staff</SelectItem>
-                    <SelectItem value="Manager">Manager</SelectItem>
-                    <SelectItem value="Admin">Admin</SelectItem>
-                    <SelectItem value="Super Admin">Super Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Workspace</Label>
-                <Input
-                  value={editingPerson.workspace}
-                  onChange={(e) => setEditingPerson({ ...editingPerson, workspace: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Availability</Label>
-                <Select value={editingPerson.availability} onValueChange={(value: any) => setEditingPerson({ ...editingPerson, availability: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Full Time">Full Time</SelectItem>
-                    <SelectItem value="Part Time">Part Time</SelectItem>
-                    <SelectItem value="Contract">Contract</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Workload</Label>
-                <Select value={editingPerson.workload} onValueChange={(value: any) => setEditingPerson({ ...editingPerson, workload: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <>
+              <Tabs defaultValue="basic" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="basic">Basic Info</TabsTrigger>
+                  <TabsTrigger value="availability">Availability</TabsTrigger>
+                  <TabsTrigger value="permissions">Permissions</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="basic" className="space-y-4">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                      {editingPerson.profilePicture ? (
+                        <img src={editingPerson.profilePicture} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-white font-bold bg-gradient-to-br from-blue-500 to-purple-600 w-full h-full flex items-center justify-center text-2xl">
+                          {editingPerson.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                        </div>
+                      )}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => document.getElementById('edit-profile-upload')?.click()}>
+                      Change Photo
+                    </Button>
+                    <input
+                      id="edit-profile-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleProfilePictureUpload(e, true)}
+                    />
+                  </div>
+                  
+                  {editingPerson.bookingLink && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Calendar size={16} className="text-indigo-600" />
+                        <span className="font-medium text-indigo-900">Booking Link:</span>
+                        <code className="bg-white px-2 py-1 rounded text-xs">{editingPerson.bookingLink}</code>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => handleCopyBookingLink(editingPerson.bookingLink!)}>
+                        <Copy size={14} />
+                      </Button>
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label>Full Name *</Label>
+                      <Input
+                        value={editingPerson.name}
+                        onChange={(e) => setEditingPerson({ ...editingPerson, name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Email Address *</Label>
+                      <Input
+                        type="email"
+                        value={editingPerson.email}
+                        onChange={(e) => setEditingPerson({ ...editingPerson, email: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Phone Number</Label>
+                      <Input
+                        type="tel"
+                        value={editingPerson.phone || ''}
+                        onChange={(e) => setEditingPerson({ ...editingPerson, phone: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Role *</Label>
+                      <Select value={editingPerson.role} onValueChange={(value: any) => setEditingPerson({ ...editingPerson, role: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Staff">Staff</SelectItem>
+                          <SelectItem value="Manager">Manager</SelectItem>
+                          <SelectItem value="Admin">Admin</SelectItem>
+                          <SelectItem value="Super Admin">Super Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Timezone</Label>
+                      <Select value={editingPerson.timezone || 'Asia/Kolkata'} onValueChange={(value: any) => setEditingPerson({ ...editingPerson, timezone: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Asia/Kolkata">Asia/Kolkata</SelectItem>
+                          <SelectItem value="America/New_York">America/New_York</SelectItem>
+                          <SelectItem value="Europe/London">Europe/London</SelectItem>
+                          <SelectItem value="Asia/Tokyo">Asia/Tokyo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Workspace</Label>
+                      <Input
+                        value={editingPerson.workspace}
+                        onChange={(e) => setEditingPerson({ ...editingPerson, workspace: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label>Availability Type</Label>
+                      <Select value={editingPerson.availability} onValueChange={(value: any) => setEditingPerson({ ...editingPerson, availability: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Full Time">Full Time</SelectItem>
+                          <SelectItem value="Part Time">Part Time</SelectItem>
+                          <SelectItem value="Contract">Contract</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Notes</Label>
+                      <Textarea
+                        value={editingPerson.notes || ''}
+                        onChange={(e) => setEditingPerson({ ...editingPerson, notes: e.target.value })}
+                        placeholder="Additional notes..."
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="availability" className="space-y-4">
+                  <p className="text-sm text-gray-500 mb-4">Manage weekly working hours</p>
+                  {(editingPerson.availabilitySchedule || DEFAULT_SCHEDULE).map((schedule, index) => (
+                    <div key={schedule.day} className="flex items-center gap-4 p-3 border rounded-lg">
+                      <div className="flex items-center gap-2 w-32">
+                        <Switch
+                          checked={schedule.enabled}
+                          onCheckedChange={(checked) => {
+                            const updated = [...(editingPerson.availabilitySchedule || DEFAULT_SCHEDULE)];
+                            updated[index] = { ...updated[index], enabled: checked };
+                            setEditingPerson({ ...editingPerson, availabilitySchedule: updated });
+                          }}
+                        />
+                        <Label className="font-medium">{schedule.day}</Label>
+                      </div>
+                      {schedule.enabled && (
+                        <>
+                          <Input
+                            type="time"
+                            value={schedule.startTime}
+                            onChange={(e) => {
+                              const updated = [...(editingPerson.availabilitySchedule || DEFAULT_SCHEDULE)];
+                              updated[index] = { ...updated[index], startTime: e.target.value };
+                              setEditingPerson({ ...editingPerson, availabilitySchedule: updated });
+                            }}
+                            className="w-32"
+                          />
+                          <span className="text-gray-500">to</span>
+                          <Input
+                            type="time"
+                            value={schedule.endTime}
+                            onChange={(e) => {
+                              const updated = [...(editingPerson.availabilitySchedule || DEFAULT_SCHEDULE)];
+                              updated[index] = { ...updated[index], endTime: e.target.value };
+                              setEditingPerson({ ...editingPerson, availabilitySchedule: updated });
+                            }}
+                            className="w-32"
+                          />
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </TabsContent>
+
+                <TabsContent value="permissions" className="space-y-4">
+                  <p className="text-sm text-gray-500 mb-4">Manage module access permissions</p>
+                  {(editingPerson.permissions || DEFAULT_PERMISSIONS).map((perm, index) => (
+                    <div key={perm.module} className="border rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Shield size={16} className="text-indigo-600" />
+                        <span className="font-medium">{perm.module}</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 ml-6">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={perm.canView}
+                            onCheckedChange={(checked) => {
+                              const updated = [...(editingPerson.permissions || DEFAULT_PERMISSIONS)];
+                              updated[index] = { ...updated[index], canView: checked };
+                              setEditingPerson({ ...editingPerson, permissions: updated });
+                            }}
+                          />
+                          <Label className="text-sm">View</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={perm.canCreate}
+                            onCheckedChange={(checked) => {
+                              const updated = [...(editingPerson.permissions || DEFAULT_PERMISSIONS)];
+                              updated[index] = { ...updated[index], canCreate: checked };
+                              setEditingPerson({ ...editingPerson, permissions: updated });
+                            }}
+                          />
+                          <Label className="text-sm">Create</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={perm.canEdit}
+                            onCheckedChange={(checked) => {
+                              const updated = [...(editingPerson.permissions || DEFAULT_PERMISSIONS)];
+                              updated[index] = { ...updated[index], canEdit: checked };
+                              setEditingPerson({ ...editingPerson, permissions: updated });
+                            }}
+                          />
+                          <Label className="text-sm">Edit</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={perm.canDelete}
+                            onCheckedChange={(checked) => {
+                              const updated = [...(editingPerson.permissions || DEFAULT_PERMISSIONS)];
+                              updated[index] = { ...updated[index], canDelete: checked };
+                              setEditingPerson({ ...editingPerson, permissions: updated });
+                            }}
+                          />
+                          <Label className="text-sm">Delete</Label>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </TabsContent>
+              </Tabs>
+            </>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditModalOpen(false)}>Cancel</Button>
@@ -465,6 +914,75 @@ export default function Salespersons() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* View Details Modal */}
+      {viewingPerson && (
+        <Dialog open={viewDetailsOpen} onOpenChange={setViewDetailsOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Team Member Details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                {viewingPerson.profilePicture ? (
+                  <img src={viewingPerson.profilePicture} alt={viewingPerson.name} className="w-20 h-20 rounded-full object-cover" />
+                ) : (
+                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-2xl">
+                    {viewingPerson.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-xl font-semibold">{viewingPerson.name}</h3>
+                  <p className="text-gray-600">{viewingPerson.email}</p>
+                  <Badge className="mt-2">{viewingPerson.role}</Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="border rounded-lg p-4 text-center">
+                  <Calendar className="mx-auto mb-2 text-blue-600" size={24} />
+                  <p className="text-2xl font-bold">{viewingPerson.totalBookings || 0}</p>
+                  <p className="text-sm text-gray-600">Total Bookings</p>
+                </div>
+                <div className="border rounded-lg p-4 text-center">
+                  <Award className="mx-auto mb-2 text-yellow-600" size={24} />
+                  <p className="text-2xl font-bold">{(viewingPerson.averageRating || 0).toFixed(1)} ⭐</p>
+                  <p className="text-sm text-gray-600">Avg Rating</p>
+                </div>
+                <div className="border rounded-lg p-4 text-center">
+                  <Users className="mx-auto mb-2 text-green-600" size={24} />
+                  <p className="text-2xl font-bold">{viewingPerson.status}</p>
+                  <p className="text-sm text-gray-600">Status</p>
+                </div>
+              </div>
+
+              {viewingPerson.bookingLink && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <Label className="text-sm font-medium mb-2 block">Booking Link</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-white px-3 py-2 rounded border text-sm">
+                      {window.location.origin}{viewingPerson.bookingLink}
+                    </code>
+                    <Button size="sm" onClick={() => handleCopyBookingLink(viewingPerson.bookingLink!)}>
+                      <Copy size={14} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {viewingPerson.notes && (
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Notes</Label>
+                  <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{viewingPerson.notes}</p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setViewDetailsOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
