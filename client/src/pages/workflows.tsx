@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,7 @@ import {
   FileText, Download, Upload, ChevronUp, ChevronDown, GripVertical, X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 // Enhanced interfaces for advanced workflow system
 interface Workflow {
@@ -134,6 +135,7 @@ interface WorkflowTemplate {
 
 export default function WorkflowsPage() {
   const { toast } = useToast();
+  const { selectedWorkspace } = useWorkspace();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [workflowLogs, setWorkflowLogs] = useState<WorkflowLog[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,6 +156,15 @@ export default function WorkflowsPage() {
     trigger: 'booking_created',
     actions: [] as WorkflowAction[]
   });
+
+  // Compute workspace-scoped storage keys
+  const workflowsStorageKey = useMemo(() => {
+    return selectedWorkspace ? `zervos_workflows::${selectedWorkspace.id}` : null;
+  }, [selectedWorkspace]);
+
+  const logsStorageKey = useMemo(() => {
+    return selectedWorkspace ? `zervos_workflow_logs::${selectedWorkspace.id}` : null;
+  }, [selectedWorkspace]);
 
   // Available variables for templates
   const variables = {
@@ -255,90 +266,105 @@ export default function WorkflowsPage() {
     }
   ];
 
+  // Default workflows for a new workspace
+  const defaultWorkflows: Workflow[] = [
+    {
+      id: '1',
+      name: 'Booking Confirmation',
+      description: 'Send confirmation email and SMS to client when booking is created',
+      version: 1,
+      trigger: { type: 'booking_created', label: 'Booking Created' },
+      actions: [
+        {
+          id: 'a1',
+          type: 'email',
+          label: 'Send Confirmation Email',
+          config: {
+            to: '{{customer.email}}',
+            subject: 'Booking Confirmed!',
+            body: 'Hi {{customer.name}}, your booking is confirmed for {{booking.date}}.'
+          },
+          order: 1
+        },
+        {
+          id: 'a2',
+          type: 'sms',
+          label: 'Send SMS',
+          config: {
+            phoneNumber: '{{customer.phone}}',
+            message: 'Your booking is confirmed!'
+          },
+          order: 2
+        }
+      ],
+      isActive: true,
+      executionCount: 245,
+      lastRun: '2 hours ago',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      tags: ['confirmation', 'booking']
+    },
+    {
+      id: '2',
+      name: 'Appointment Reminder',
+      description: 'Send reminder 24 hours before appointment',
+      version: 1,
+      trigger: { type: 'booking_reminder', label: 'Booking Reminder (24h)', config: { daysBeforeAppointment: 1 } },
+      actions: [
+        {
+          id: 'a3',
+          type: 'email',
+          label: 'Send Reminder',
+          config: {
+            to: '{{customer.email}}',
+            subject: 'Reminder: Appointment Tomorrow',
+            body: 'Hi {{customer.name}}, reminder for your appointment on {{booking.date}}.'
+          },
+          order: 1
+        }
+      ],
+      isActive: true,
+      executionCount: 189,
+      lastRun: '5 hours ago',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      tags: ['reminder']
+    }
+  ];
+
+  // Load workflows when workspace changes
   useEffect(() => {
-    const saved = localStorage.getItem('zervos_workflows');
-    const savedLogs = localStorage.getItem('zervos_workflow_logs');
-    
+    if (!workflowsStorageKey) {
+      setWorkflows([]);
+      return;
+    }
+    const saved = localStorage.getItem(workflowsStorageKey);
     if (saved) {
       setWorkflows(JSON.parse(saved));
     } else {
-      // Default workflows
-      const defaultWorkflows: Workflow[] = [
-        {
-          id: '1',
-          name: 'Booking Confirmation',
-          description: 'Send confirmation email and SMS to client when booking is created',
-          version: 1,
-          trigger: { type: 'booking_created', label: 'Booking Created' },
-          actions: [
-            {
-              id: 'a1',
-              type: 'email',
-              label: 'Send Confirmation Email',
-              config: {
-                to: '{{customer.email}}',
-                subject: 'Booking Confirmed!',
-                body: 'Hi {{customer.name}}, your booking is confirmed for {{booking.date}}.'
-              },
-              order: 1
-            },
-            {
-              id: 'a2',
-              type: 'sms',
-              label: 'Send SMS',
-              config: {
-                phoneNumber: '{{customer.phone}}',
-                message: 'Your booking is confirmed!'
-              },
-              order: 2
-            }
-          ],
-          isActive: true,
-          executionCount: 245,
-          lastRun: '2 hours ago',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          tags: ['confirmation', 'booking']
-        },
-        {
-          id: '2',
-          name: 'Appointment Reminder',
-          description: 'Send reminder 24 hours before appointment',
-          version: 1,
-          trigger: { type: 'booking_reminder', label: 'Booking Reminder (24h)', config: { daysBeforeAppointment: 1 } },
-          actions: [
-            {
-              id: 'a3',
-              type: 'email',
-              label: 'Send Reminder',
-              config: {
-                to: '{{customer.email}}',
-                subject: 'Reminder: Appointment Tomorrow',
-                body: 'Hi {{customer.name}}, reminder for your appointment on {{booking.date}}.'
-              },
-              order: 1
-            }
-          ],
-          isActive: true,
-          executionCount: 189,
-          lastRun: '5 hours ago',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          tags: ['reminder']
-        }
-      ];
       setWorkflows(defaultWorkflows);
-      localStorage.setItem('zervos_workflows', JSON.stringify(defaultWorkflows));
     }
+  }, [workflowsStorageKey]);
 
+  // Load logs when workspace changes
+  useEffect(() => {
+    if (!logsStorageKey) {
+      setWorkflowLogs([]);
+      return;
+    }
+    const savedLogs = localStorage.getItem(logsStorageKey);
     if (savedLogs) {
       setWorkflowLogs(JSON.parse(savedLogs));
+    } else {
+      setWorkflowLogs([]);
     }
-  }, []);
+  }, [logsStorageKey]);
 
   const saveWorkflows = (updated: Workflow[]) => {
     setWorkflows(updated);
-    localStorage.setItem('zervos_workflows', JSON.stringify(updated));
+    if (workflowsStorageKey) {
+      localStorage.setItem(workflowsStorageKey, JSON.stringify(updated));
+    }
   };
 
   const handleCreateWorkflow = () => {
@@ -502,7 +528,9 @@ export default function WorkflowsPage() {
 
     const updatedLogs = [log, ...workflowLogs].slice(0, 100);
     setWorkflowLogs(updatedLogs);
-    localStorage.setItem('zervos_workflow_logs', JSON.stringify(updatedLogs));
+    if (logsStorageKey) {
+      localStorage.setItem(logsStorageKey, JSON.stringify(updatedLogs));
+    }
     
     setTestRunOpen(true);
     toast({ title: "Test run completed", description: `Executed in ${log.duration}ms` });
@@ -653,12 +681,21 @@ export default function WorkflowsPage() {
               <h1 className="text-2xl font-bold text-gray-900">Workflows</h1>
               <p className="text-sm text-gray-600 mt-1">Automate your booking processes and communications</p>
             </div>
-            <Button onClick={() => setCreateModalOpen(true)} className="gap-2">
+            <Button onClick={() => setCreateModalOpen(true)} className="gap-2" disabled={!selectedWorkspace}>
               <Plus size={18} />
               Create Workflow
             </Button>
           </div>
         </div>
+
+        {/* Workspace guard */}
+        {!selectedWorkspace && (
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+              Please select a workspace from the "My Space" dropdown to manage your workflows.
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="max-w-7xl mx-auto px-6 py-8">

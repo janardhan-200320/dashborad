@@ -361,9 +361,15 @@ export default function AdminCenterPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {section.cards.map((card, cardIndex) => {
                     const Icon = card.icon;
+                    const handleCardClick = () => {
+                      if (card.title === 'Workspaces') {
+                        setLocation('/dashboard/admin-center/workspaces');
+                      }
+                    };
                     return (
                       <div 
                         key={cardIndex}
+                        onClick={handleCardClick}
                         className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
                       >
                         <div className="flex items-start justify-between mb-4">

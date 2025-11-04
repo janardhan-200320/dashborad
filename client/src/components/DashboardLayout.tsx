@@ -17,6 +17,8 @@ import {
   Briefcase
 } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
+import WorkspaceSelector from './WorkspaceSelector';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface Company {
   name: string;
@@ -34,6 +36,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [company, setCompany] = useState<Company | null>(null);
   const [orgLogo, setOrgLogo] = useState<string>('');
+  const { selectedWorkspace } = useWorkspace();
 
   useEffect(() => {
     const savedCompany = localStorage.getItem('zervos_company');
@@ -128,6 +131,9 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
           </div>
         </div>
 
+        {/* Workspace Selector */}
+        <WorkspaceSelector sidebarOpen={sidebarOpen} />
+
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4">
           <div className="space-y-1">
@@ -211,7 +217,19 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             </div>
             
             <div className="flex items-center gap-4">
-              {company && (
+              {selectedWorkspace ? (
+                <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className={`w-10 h-10 ${selectedWorkspace.color} rounded-lg flex items-center justify-center`}>
+                    <span className="text-sm font-bold text-gray-900">{selectedWorkspace.initials}</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{selectedWorkspace.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {selectedWorkspace.status} • {selectedWorkspace.email || 'No email'}
+                    </p>
+                  </div>
+                </div>
+              ) : company && (
                 <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-gray-100 rounded-lg">
                   {orgLogo ? (
                     <div className="w-8 h-8 rounded-md overflow-hidden bg-white flex-shrink-0">

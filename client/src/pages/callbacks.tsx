@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface Workflow {
   id: string;
@@ -60,28 +61,47 @@ type BookingType = 'one-on-one' | 'group' | 'collective' | null;
 type ScheduleType = 'one-time' | 'recurring' | null;
 
 export default function WorkflowsPage() {
+  const { selectedWorkspace } = useWorkspace();
   const [company, setCompany] = useState<any>(null);
   const { toast } = useToast();
+
+  // Compute workspace-scoped storage key
+  const salesCallsStorageKey = useMemo(() => {
+    return selectedWorkspace ? `zervos_sales_calls::${selectedWorkspace.id}` : null;
+  }, [selectedWorkspace]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem('zervos_company');
       if (raw) setCompany(JSON.parse(raw));
-      
-      // Load saved sales calls
-      const savedCalls = localStorage.getItem('zervos_sales_calls');
-      if (savedCalls) {
-        setWorkflows(JSON.parse(savedCalls));
-      }
     } catch {}
   }, []);
+
+  // Load saved sales calls when workspace changes
+  useEffect(() => {
+    if (!salesCallsStorageKey) {
+      // No workspace selected, clear in-memory list to avoid cross-leakage
+      setWorkflows([]);
+      return;
+    }
+    try {
+      const savedCalls = localStorage.getItem(salesCallsStorageKey);
+      if (savedCalls) {
+        setWorkflows(JSON.parse(savedCalls));
+      } else {
+        // Keep defaults if no saved data for this workspace
+        setWorkflows(defaultWorkflowsRef.current);
+      }
+    } catch {}
+  }, [salesCallsStorageKey]);
 
   // Get dynamic label
   const eventTypeLabel = company?.eventTypeLabel || 'Sales Calls';
   const eventTypeSingular = eventTypeLabel.endsWith('s') ? eventTypeLabel.slice(0, -1) : eventTypeLabel;
   const teamMemberLabel = company?.teamMemberLabel || 'Salespersons';
 
-  const [workflows, setWorkflows] = useState<Workflow[]>([
+  // Default examples (used when a workspace has no saved data yet)
+  const defaultWorkflowsRef = useRef<Workflow[]>([
     {
       id: '1',
       name: 'Send Reminder 1 Day Before',
@@ -110,6 +130,8 @@ export default function WorkflowsPage() {
       runsCount: 32
     },
   ]);
+
+  const [workflows, setWorkflows] = useState<Workflow[]>(defaultWorkflowsRef.current);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewWorkflowOpen, setIsNewWorkflowOpen] = useState(false);
@@ -185,7 +207,22 @@ export default function WorkflowsPage() {
     sp.name.toLowerCase().includes(searchSalespersons.toLowerCase())
   );
 
+  const persistWorkflows = (items: Workflow[]) => {
+    setWorkflows(items);
+    if (salesCallsStorageKey) {
+      try {
+        localStorage.setItem(salesCallsStorageKey, JSON.stringify(items));
+      } catch (error) {
+        console.error('Error saving to localStorage:', error);
+      }
+    }
+  };
+
   const handleCreateWorkflow = () => {
+    if (!selectedWorkspace || !salesCallsStorageKey) {
+      toast({ title: 'Select a workspace', description: 'Please select a workspace from My Space to create sessions.' });
+      return;
+    }
     const newWf: Workflow = {
       id: Date.now().toString(),
       name: newWorkflow.name,
@@ -204,14 +241,7 @@ export default function WorkflowsPage() {
     };
     
     const updatedWorkflows = [...workflows, newWf];
-    setWorkflows(updatedWorkflows);
-    
-    // Save to localStorage for persistence
-    try {
-      localStorage.setItem('zervos_sales_calls', JSON.stringify(updatedWorkflows));
-    } catch (error) {
-      console.error('Error saving to localStorage:', error);
-    }
+    persistWorkflows(updatedWorkflows);
     
     handleCloseModal();
     toast({
@@ -271,13 +301,15 @@ export default function WorkflowsPage() {
   };
 
   const handleToggleActive = (id: string) => {
-    setWorkflows(workflows.map(wf =>
+    const updated = workflows.map(wf =>
       wf.id === id ? { ...wf, isActive: !wf.isActive } : wf
-    ));
+    );
+    persistWorkflows(updated);
   };
 
   const handleDeleteWorkflow = (id: string) => {
-    setWorkflows(workflows.filter(wf => wf.id !== id));
+    const updated = workflows.filter(wf => wf.id !== id);
+    persistWorkflows(updated);
   };
 
   const handleShareBookingLink = (workflowId: string, workflowName: string) => {
@@ -296,6 +328,12 @@ export default function WorkflowsPage() {
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
+        {/* Workspace guard */}
+        {!selectedWorkspace && (
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+            Please select a workspace from the "My Space" dropdown to manage your {eventTypeLabel.toLowerCase()}.
+          </div>
+        )}
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
@@ -305,7 +343,7 @@ export default function WorkflowsPage() {
             </h1>
             <p className="text-gray-600 mt-1">Manage your {eventTypeLabel.toLowerCase()} and automation</p>
           </div>
-          <Button onClick={() => setIsNewWorkflowOpen(true)} className="gap-2">
+          <Button onClick={() => setIsNewWorkflowOpen(true)} className="gap-2" disabled={!selectedWorkspace}>
             <Plus size={18} />
             New {eventTypeSingular}
           </Button>
@@ -421,7 +459,7 @@ export default function WorkflowsPage() {
         )}
 
         {/* New Sales Call Modal - Multi-Step */}
-        <Dialog open={isNewWorkflowOpen} onOpenChange={handleCloseModal}>
+  <Dialog open={isNewWorkflowOpen && !!selectedWorkspace} onOpenChange={handleCloseModal}>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <button
               onClick={handleCloseModal}
