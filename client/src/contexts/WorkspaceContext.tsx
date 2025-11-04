@@ -27,20 +27,55 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspacesState] = useState<Workspace[]>([]);
 
   useEffect(() => {
+    // Load company info for default workspace
+    const companyData = localStorage.getItem('zervos_company');
+    const company = companyData ? JSON.parse(companyData) : null;
+    
     // Load workspaces from localStorage
     const workspacesData = localStorage.getItem('workspaces');
+    let parsed: Workspace[] = [];
+    
     if (workspacesData) {
-      const parsed = JSON.parse(workspacesData);
-      setWorkspacesState(parsed);
+      parsed = JSON.parse(workspacesData);
+    }
+    
+    // If no workspaces exist, create a default one
+    if (parsed.length === 0) {
+      const defaultWorkspace: Workspace = {
+        id: Date.now().toString(),
+        name: company?.name || 'My Workspace',
+        initials: (company?.name || 'MW').substring(0, 2).toUpperCase(),
+        color: 'bg-purple-500',
+        email: company?.email || '',
+        description: company?.industry || 'Default workspace',
+        status: 'Active',
+        bookingLink: `${window.location.origin}/book/default`,
+        prefix: 'BK',
+        maxDigits: 4
+      };
       
-      // Load selected workspace
-      const selectedId = localStorage.getItem('selectedWorkspaceId');
-      if (selectedId) {
-        const selected = parsed.find((w: Workspace) => w.id === selectedId);
-        if (selected) {
-          setSelectedWorkspaceState(selected);
-        }
-      }
+      parsed = [defaultWorkspace];
+      localStorage.setItem('workspaces', JSON.stringify(parsed));
+    }
+    
+    setWorkspacesState(parsed);
+    
+    // Load selected workspace or auto-select the first one
+    const selectedId = localStorage.getItem('selectedWorkspaceId');
+    let selected = null;
+    
+    if (selectedId) {
+      selected = parsed.find((w: Workspace) => w.id === selectedId) || null;
+    }
+    
+    // If no workspace selected, auto-select the first one
+    if (!selected && parsed.length > 0) {
+      selected = parsed[0];
+      localStorage.setItem('selectedWorkspaceId', selected.id);
+    }
+    
+    if (selected) {
+      setSelectedWorkspaceState(selected);
     }
   }, []);
 

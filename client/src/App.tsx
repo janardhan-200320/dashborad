@@ -22,6 +22,7 @@ import AccountPage from "@/pages/Account";
 import SubscriptionPage from "@/pages/Subscription";
 import Workspaces from "@/pages/admin/Workspaces";
 import WorkspaceView from "@/pages/admin/WorkspaceView";
+import Resources from "@/pages/admin/Resources";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/dashboard/customers" component={CustomersPage} />
       <Route path="/dashboard/admin-center" component={AdminCenterPage} />
       <Route path="/dashboard/admin-center/workspaces" component={Workspaces} />
+      <Route path="/dashboard/admin-center/resources" component={Resources} />
       <Route path="/dashboard/workspace/:id" component={WorkspaceView} />
       <Route path="/dashboard/salespersons" component={SalespersonsPage} />
       <Route path="/dashboard/account" component={AccountPage} />

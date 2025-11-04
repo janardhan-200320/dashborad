@@ -229,6 +229,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========== APPOINTMENTS ROUTES (in-memory) ==========
+  app.get("/api/appointments", async (_req, res) => {
+    try {
+      const items = await storage.getAppointments();
+      return res.json(items);
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/appointments", async (req, res) => {
+    try {
+      const body = req.body as any;
+      // Minimal validation
+      if (!body || !body.customerName || !body.email || !body.serviceName || !body.date || !body.time) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      const created = await storage.createAppointment({
+        customerName: body.customerName,
+        email: body.email,
+        phone: body.phone,
+        serviceName: body.serviceName,
+        date: body.date,
+        time: body.time,
+        status: body.status || 'upcoming',
+        notes: body.notes,
+      });
+      return res.status(201).json(created);
+    } catch (error) {
+      console.error("Error creating appointment:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

@@ -46,11 +46,6 @@ export default function WorkspaceSelector({ sidebarOpen }: WorkspaceSelectorProp
   const displayInitials = selectedWorkspace?.initials || 'MS';
   const displayColor = selectedWorkspace?.color || 'bg-purple-200';
 
-  // Don't render if no workspaces exist
-  if (workspaces.length === 0) {
-    return null;
-  }
-
   return (
     <div className="px-3 py-2">
       <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>

@@ -12,6 +12,7 @@ interface SalesCall {
   duration: string;
   type: string;
   color: string;
+  assignedSalespersons?: string[];
 }
 
 interface Salesperson {
@@ -25,8 +26,8 @@ export default function BookingPagesPage() {
   const { toast } = useToast();
   const { selectedWorkspace } = useWorkspace();
   const [company, setCompany] = useState<any>(null);
-  const [searchSalesCalls, setSearchSalesCalls] = useState('');
-  const [searchSalespersons, setSearchSalespersons] = useState('');
+  // Unified search across calls and team members
+  const [searchQuery, setSearchQuery] = useState('');
   const [salesCalls, setSalesCalls] = useState<SalesCall[]>([]);
   const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
 
@@ -61,7 +62,8 @@ export default function BookingPagesPage() {
           name: call.name,
           duration: call.action || '30 mins',
           type: call.bookingType || call.trigger || 'One-on-One',
-          color: 'bg-green-100 text-green-700'
+          color: 'bg-green-100 text-green-700',
+          assignedSalespersons: Array.isArray(call.assignedSalespersons) ? call.assignedSalespersons : []
         })));
       } else {
         setSalesCalls([]);
@@ -80,10 +82,16 @@ export default function BookingPagesPage() {
       if (savedMembers) {
         const members = JSON.parse(savedMembers);
         setSalespersons(members.map((member: any) => ({
-          id: member.id,
-          name: member.name,
-          email: member.email,
-          avatar: member.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+          id: member.id ?? member.email ?? String(Date.now()),
+          name: member.name ?? member.email ?? 'Member',
+          email: member.email ?? '',
+          avatar: (member.name || member.email || 'M')
+            .toString()
+            .split(' ')
+            .map((n: string) => n[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2)
         })));
       } else {
         setSalespersons([]);
@@ -102,6 +110,31 @@ export default function BookingPagesPage() {
       description: 'Booking page link ready to share',
     });
   };
+
+  // Derived filtered lists using unified search
+  const filteredSalesCalls = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return salesCalls;
+    return salesCalls.filter(call => {
+      const basicMatch = (
+        call.name?.toLowerCase().includes(q) ||
+        call.duration?.toLowerCase().includes(q) ||
+        call.type?.toLowerCase().includes(q)
+      );
+      const assignedIds = call.assignedSalespersons || [];
+      const memberMatch = assignedIds.some(id => {
+        const m = salespersons.find(sp => sp.id === id);
+        return m ? (m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q)) : false;
+      });
+      return basicMatch || memberMatch;
+    });
+  }, [searchQuery, salesCalls, salespersons]);
+
+  const filteredSalespersons = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return salespersons;
+    return salespersons.filter(p => p.name?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q));
+  }, [searchQuery, salespersons]);
 
   return (
     <DashboardLayout>
@@ -164,16 +197,16 @@ export default function BookingPagesPage() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                   <Input
                     type="text"
-                    placeholder="Search"
-                    value={searchSalesCalls}
-                    onChange={(e) => setSearchSalesCalls(e.target.value)}
+                    placeholder={`Search ${eventTypeLabel.toLowerCase()} or ${teamMemberLabel.toLowerCase()}`}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9 h-9"
                   />
                 </div>
               </div>
             </div>
             <div className="p-6">
-              {salesCalls.map((call) => (
+              {filteredSalesCalls.map((call) => (
                 <div key={call.id} className="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-lg transition-colors">
                   <div className={`h-12 w-12 rounded-full ${call.color} flex items-center justify-center font-bold text-sm`}>
                     {call.name.split(' ').map(w => w[0]).join('').substring(0, 2)}
@@ -203,16 +236,16 @@ export default function BookingPagesPage() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
                   <Input
                     type="text"
-                    placeholder="Search"
-                    value={searchSalespersons}
-                    onChange={(e) => setSearchSalespersons(e.target.value)}
+                    placeholder={`Search ${eventTypeLabel.toLowerCase()} or ${teamMemberLabel.toLowerCase()}`}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9 h-9"
                   />
                 </div>
               </div>
             </div>
             <div className="p-6">
-              {salespersons.map((person) => (
+              {filteredSalespersons.map((person) => (
                 <div key={person.id} className="flex items-center gap-4 p-4 hover:bg-gray-50 rounded-lg transition-colors">
                   <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium">
                     {person.avatar}

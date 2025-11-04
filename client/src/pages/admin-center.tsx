@@ -364,6 +364,8 @@ export default function AdminCenterPage() {
                     const handleCardClick = () => {
                       if (card.title === 'Workspaces') {
                         setLocation('/dashboard/admin-center/workspaces');
+                      } else if (card.title === 'Resources') {
+                        setLocation('/dashboard/admin-center/resources');
                       }
                     };
                     return (

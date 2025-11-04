@@ -77,6 +77,27 @@ const generateBookingLink = (name: string, id: string): string => {
 
 export default function Salespersons() {
   const { toast } = useToast();
+  // Dynamic labels from organization/company profile
+  interface Company { teamMemberLabel?: string }
+  const [company, setCompany] = useState<Company | null>(null);
+  const [orgLabels, setOrgLabels] = useState<{ teamMemberLabel?: string } | null>(null);
+  useEffect(() => {
+    const savedCompany = localStorage.getItem('zervos_company');
+    if (savedCompany) setCompany(JSON.parse(savedCompany));
+
+    // Fallback: also check organization settings for labels if present
+    const orgSettingsRaw = localStorage.getItem('zervos_organization_settings');
+    if (orgSettingsRaw) {
+      try {
+        const orgSettings = JSON.parse(orgSettingsRaw);
+        // Support both flat and nested labels shapes
+        const tm = orgSettings?.labels?.teamMemberLabel || orgSettings?.teamMemberLabel;
+        if (tm) setOrgLabels({ teamMemberLabel: tm });
+      } catch {}
+    }
+  }, []);
+  const teamMemberLabel = orgLabels?.teamMemberLabel || company?.teamMemberLabel || 'Salespersons';
+  const teamMemberLabelSingular = teamMemberLabel.endsWith('s') ? teamMemberLabel.slice(0, -1) : teamMemberLabel;
   const [searchQuery, setSearchQuery] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -157,7 +178,7 @@ export default function Salespersons() {
     });
     toast({
       title: "Success",
-      description: "Team member added successfully",
+      description: `${teamMemberLabelSingular} added successfully`,
     });
   };
 
@@ -169,7 +190,7 @@ export default function Salespersons() {
     setEditingPerson(null);
     toast({
       title: "Success",
-      description: "Salesperson updated successfully",
+      description: `${teamMemberLabelSingular} updated successfully`,
     });
   };
 
@@ -178,7 +199,7 @@ export default function Salespersons() {
     saveToLocalStorage(updated);
     toast({
       title: "Success",
-      description: "Salesperson removed",
+      description: `${teamMemberLabelSingular} removed`,
     });
   };
 
@@ -234,7 +255,7 @@ export default function Salespersons() {
     <div className="p-8 max-w-7xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-gray-900">Salespersons</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{teamMemberLabel}</h1>
           <Badge variant="secondary" className="text-sm">
             {salespersons.length} Total
           </Badge>
@@ -255,7 +276,7 @@ export default function Salespersons() {
           </div>
           <Button className="gap-2" onClick={() => setAddModalOpen(true)}>
             <Plus size={16} />
-            Add Salesperson
+            {`Add ${teamMemberLabelSingular}`}
           </Button>
         </div>
       </div>
@@ -266,7 +287,7 @@ export default function Salespersons() {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                TEAM MEMBER
+                {teamMemberLabelSingular.toUpperCase()}
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 CONTACT

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Zap, Search, MoreVertical, Play, Pause, Trash2, Share2, Copy, ExternalLink, Users, UserCheck, UsersRound, Camera, Info, X } from 'lucide-react';
+import { Plus, Zap, Search, MoreVertical, Play, Pause, Trash2, Share2, Copy, ExternalLink, Users, UserCheck, UsersRound, Camera, Info, X, Edit } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,9 @@ interface Workflow {
   bookingType?: string;
   scheduleType?: string;
   assignedSalespersons?: string[];
+  availability?: Record<string, { enabled: boolean; start: string; end: string }>;
+  useOrgFormFields?: boolean;
+  customFormFields?: LoginField[];
 }
 
 interface Salesperson {
@@ -55,6 +58,15 @@ interface Salesperson {
   name: string;
   email?: string;
   avatar: string;
+}
+
+type DynamicFieldType = 'text' | 'email' | 'tel' | 'date' | 'number' | 'textarea';
+interface LoginField {
+  id: string;
+  name: string;
+  type: DynamicFieldType;
+  required: boolean;
+  placeholder?: string;
 }
 
 type BookingType = 'one-on-one' | 'group' | 'collective' | null;
@@ -154,54 +166,120 @@ export default function WorkflowsPage() {
     numberOfRecurrences: '1',
   });
 
-  // Load salespersons from localStorage
+  // ===== Edit workflow state =====
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
+  const [editTab, setEditTab] = useState<'details' | 'assign' | 'availability' | 'form'>('details');
+  const [editSelectedSalespersons, setEditSelectedSalespersons] = useState<string[]>([]);
+  const [editLoginFields, setEditLoginFields] = useState<LoginField[]>([]);
+  const [editSearchSalespersons, setEditSearchSalespersons] = useState('');
+
+  // Load salespersons from localStorage (supports multiple keys + workspace scope)
   const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
 
-  // Load team members/salespersons on mount
-  useEffect(() => {
+  const loadTeamMembers = () => {
     try {
-      const savedMembers = localStorage.getItem('zervos_team_members');
-      if (savedMembers) {
-        const members = JSON.parse(savedMembers);
-        const formatted = members.map((member: any) => ({
-          id: member.id,
-          name: member.name,
-          email: member.email,
-          avatar: member.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+      // Try workspace-scoped keys first
+      const candidates: string[] = [];
+      if (selectedWorkspace) {
+        candidates.push(`zervos_team_members::${selectedWorkspace.id}`);
+        candidates.push(`zervos_salespersons::${selectedWorkspace.id}`);
+      }
+      // Fallback global keys
+      candidates.push('zervos_team_members');
+      candidates.push('zervos_salespersons');
+
+      let found: any[] | null = null;
+      for (const key of candidates) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length >= 0) {
+              found = parsed;
+              break;
+            }
+          } catch {}
+        }
+      }
+
+      if (found) {
+        const formatted = found.map((member: any) => ({
+          id: member.id ?? member.email ?? String(Date.now()),
+          name: member.name ?? member.email ?? 'Member',
+          email: member.email ?? '',
+          avatar: (member.name || member.email || 'M')
+            .toString()
+            .split(' ')
+            .map((n: string) => n[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2),
         }));
         setSalespersons(formatted);
       } else {
-        // Default salespersons
+        // Defaults if nothing saved yet
         setSalespersons([
-          {
-            id: '1',
-            name: 'Bharath Reddy',
-            email: 'bharathreddyn6@gmail.com',
-            avatar: 'BR'
-          },
-          {
-            id: '2',
-            name: 'Sarah Johnson',
-            email: 'sarah@company.com',
-            avatar: 'SJ'
-          },
-          {
-            id: '3',
-            name: 'Mike Williams',
-            email: 'mike@company.com',
-            avatar: 'MW'
-          },
+          { id: '1', name: 'Bharath Reddy', email: 'bharathreddyn6@gmail.com', avatar: 'BR' },
+          { id: '2', name: 'Sarah Johnson', email: 'sarah@company.com', avatar: 'SJ' },
+          { id: '3', name: 'Mike Williams', email: 'mike@company.com', avatar: 'MW' },
         ]);
       }
     } catch (error) {
       console.error('Error loading team members:', error);
     }
+  };
+
+  // Initial load and when workspace changes
+  useEffect(() => {
+    loadTeamMembers();
+  }, [selectedWorkspace]);
+
+  // Refresh when opening assignment step
+  useEffect(() => {
+    if (isNewWorkflowOpen && createStep === 3) {
+      loadTeamMembers();
+    }
+  }, [isNewWorkflowOpen, createStep]);
+
+  // Listen to storage changes from other tabs/pages
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key.includes('zervos_team_members') || e.key.includes('zervos_salespersons')) {
+        loadTeamMembers();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const filteredWorkflows = workflows.filter(wf =>
-    wf.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    wf.trigger.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Combined search: match by workflow fields OR assigned team member names/emails
+  const filteredWorkflows = workflows.filter((wf) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+
+    // Basic fields
+    const basicMatch = (
+      wf.name?.toLowerCase().includes(q) ||
+      wf.trigger?.toLowerCase().includes(q) ||
+      wf.description?.toLowerCase().includes(q) ||
+      wf.action?.toLowerCase().includes(q) ||
+      wf.bookingType?.toLowerCase().includes(q) ||
+      wf.scheduleType?.toLowerCase().includes(q)
+    );
+
+    // Assigned team members (IDs -> names/emails)
+    const assignedIds = wf.assignedSalespersons || [];
+    const assignedMembers = assignedIds
+      .map(id => salespersons.find(sp => sp.id === id))
+      .filter((m): m is Salesperson => !!m);
+    const memberMatch = assignedMembers.some(m =>
+      m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q)
+    );
+
+    return basicMatch || memberMatch;
+  });
 
   const filteredSalespersons = salespersons.filter(sp =>
     sp.name.toLowerCase().includes(searchSalespersons.toLowerCase())
@@ -216,6 +294,42 @@ export default function WorkflowsPage() {
         console.error('Error saving to localStorage:', error);
       }
     }
+  };
+
+  const defaultAvailability = (): Record<string, { enabled: boolean; start: string; end: string }> => ({
+    Monday: { enabled: true, start: '09:00', end: '17:00' },
+    Tuesday: { enabled: true, start: '09:00', end: '17:00' },
+    Wednesday: { enabled: true, start: '09:00', end: '17:00' },
+    Thursday: { enabled: true, start: '09:00', end: '17:00' },
+    Friday: { enabled: true, start: '09:00', end: '17:00' },
+    Saturday: { enabled: false, start: '09:00', end: '13:00' },
+    Sunday: { enabled: false, start: '09:00', end: '13:00' },
+  });
+
+  // Open edit dialog for a workflow
+  const handleOpenEdit = (wf: Workflow) => {
+    setEditingWorkflow({
+      ...wf,
+      availability: wf.availability || defaultAvailability(),
+      useOrgFormFields: wf.useOrgFormFields !== false ? true : false,
+      customFormFields: wf.customFormFields || [],
+    });
+    setEditSelectedSalespersons(wf.assignedSalespersons || []);
+    setEditLoginFields(wf.customFormFields || []);
+    setEditTab('details');
+    setIsEditOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingWorkflow) return;
+    const updated = workflows.map(w => w.id === editingWorkflow.id ? {
+      ...editingWorkflow,
+      assignedSalespersons: editSelectedSalespersons,
+      customFormFields: editingWorkflow.useOrgFormFields ? [] : editLoginFields,
+    } : w);
+    persistWorkflows(updated);
+    setIsEditOpen(false);
+    toast({ title: 'Updated', description: `${eventTypeSingular} updated successfully` });
   };
 
   const handleCreateWorkflow = () => {
@@ -411,6 +525,10 @@ export default function WorkflowsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleOpenEdit(wf)}>
+                          <Edit size={16} className="mr-2" />
+                          Edit
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleOpenBookingPage(wf.id)}>
                           <ExternalLink size={16} className="mr-2" />
                           Open Booking Page
@@ -895,7 +1013,240 @@ export default function WorkflowsPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Edit Sales Call Modal */}
+        <Dialog open={isEditOpen && !!editingWorkflow} onOpenChange={(open) => setIsEditOpen(open)}>
+          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsEditOpen(false)}
+              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <DialogHeader>
+              <DialogTitle className="text-2xl">Edit {eventTypeSingular}</DialogTitle>
+              <DialogDescription>Update details, assignment, availability, and form fields</DialogDescription>
+            </DialogHeader>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mt-2">
+              {(['details','assign','availability','form'] as const).map(t => (
+                <Button key={t} variant={editTab===t? 'default':'outline'} size="sm" onClick={() => setEditTab(t)}>
+                  {t.charAt(0).toUpperCase()+t.slice(1)}
+                </Button>
+              ))}
+            </div>
+
+            <div className="py-4 space-y-4">
+              {/* DETAILS TAB */}
+              {editTab === 'details' && editingWorkflow && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input
+                      value={editingWorkflow.name}
+                      onChange={(e)=> setEditingWorkflow({ ...editingWorkflow, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                      value={editingWorkflow.description || ''}
+                      onChange={(e)=> setEditingWorkflow({ ...editingWorkflow, description: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Duration Hours</Label>
+                      <Select
+                        value={editingWorkflow.duration?.hours || '0'}
+                        onValueChange={(val)=> setEditingWorkflow({ ...editingWorkflow, duration: { ...(editingWorkflow.duration||{hours:'0',minutes:'30'}), hours: val }})}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[0,1,2,3,4,5,6,7,8].map(h => (
+                            <SelectItem key={h} value={h.toString()}>{h} Hours</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Duration Minutes</Label>
+                      <Select
+                        value={editingWorkflow.duration?.minutes || '30'}
+                        onValueChange={(val)=> setEditingWorkflow({ ...editingWorkflow, duration: { ...(editingWorkflow.duration||{hours:'0',minutes:'30'}), minutes: val }})}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {['0','15','30','45'].map(m => (
+                            <SelectItem key={m} value={m}>{m} Minutes</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Meeting Mode</Label>
+                    <Select
+                      value={editingWorkflow.meetingMode || ''}
+                      onValueChange={(val)=> setEditingWorkflow({ ...editingWorkflow, meetingMode: val })}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select meeting mode" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="video">Video Conference</SelectItem>
+                        <SelectItem value="phone">Phone Call</SelectItem>
+                        <SelectItem value="in-person">In Person</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* ASSIGN TAB */}
+              {editTab === 'assign' && (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                    <Input
+                      type="text"
+                      placeholder={`Search ${teamMemberLabel}`}
+                      value={editSearchSalespersons}
+                      onChange={(e)=> setEditSearchSalespersons(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto space-y-1">
+                    {salespersons
+                      .filter(sp=> sp.name.toLowerCase().includes(editSearchSalespersons.toLowerCase()))
+                      .map(sp => (
+                        <div key={sp.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium">{sp.avatar}</div>
+                            <div>
+                              <div className="font-medium text-gray-900">{sp.name}</div>
+                              <div className="text-xs text-gray-500">{sp.email}</div>
+                            </div>
+                          </div>
+                          <Checkbox
+                            checked={editSelectedSalespersons.includes(sp.id)}
+                            onCheckedChange={() => setEditSelectedSalespersons(prev => prev.includes(sp.id) ? prev.filter(id=>id!==sp.id) : [...prev, sp.id])}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* AVAILABILITY TAB */}
+              {editTab === 'availability' && editingWorkflow && (
+                <div className="space-y-4">
+                  {Object.entries(editingWorkflow.availability || {}).map(([day, cfg]) => (
+                    <div key={day} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="font-medium text-gray-800 w-28">{day}</div>
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={cfg.enabled}
+                          onCheckedChange={(checked)=> setEditingWorkflow({
+                            ...editingWorkflow,
+                            availability: {
+                              ...(editingWorkflow.availability||{}),
+                              [day]: { ...cfg, enabled: !!checked }
+                            }
+                          })}
+                        />
+                        <Input
+                          type="time"
+                          value={cfg.start}
+                          disabled={!cfg.enabled}
+                          onChange={(e)=> setEditingWorkflow({
+                            ...editingWorkflow,
+                            availability: { ...(editingWorkflow.availability||{}), [day]: { ...cfg, start: e.target.value } }
+                          })}
+                          className="w-32"
+                        />
+                        <span className="text-gray-500">to</span>
+                        <Input
+                          type="time"
+                          value={cfg.end}
+                          disabled={!cfg.enabled}
+                          onChange={(e)=> setEditingWorkflow({
+                            ...editingWorkflow,
+                            availability: { ...(editingWorkflow.availability||{}), [day]: { ...cfg, end: e.target.value } }
+                          })}
+                          className="w-32"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* FORM TAB */}
+              {editTab === 'form' && editingWorkflow && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div>
+                      <div className="font-medium">Use organization default booking form</div>
+                      <div className="text-sm text-gray-500">Turn off to customize fields for this {eventTypeSingular.toLowerCase()}</div>
+                    </div>
+                    <Switch
+                      checked={editingWorkflow.useOrgFormFields !== false}
+                      onCheckedChange={(checked)=> {
+                        const useOrg = !!checked;
+                        setEditingWorkflow({ ...editingWorkflow, useOrgFormFields: useOrg });
+                      }}
+                    />
+                  </div>
+
+                  {editingWorkflow.useOrgFormFields === false && (
+                    <div className="space-y-3">
+                      {/* Simple fields editor */}
+                      {editLoginFields.map((f, idx) => (
+                        <div key={f.id} className="grid grid-cols-12 gap-2 items-center p-2 border rounded-lg">
+                          <Input className="col-span-3" value={f.name} onChange={(e)=> {
+                            const arr = [...editLoginFields]; arr[idx] = { ...arr[idx], name: e.target.value }; setEditLoginFields(arr);
+                          }} />
+                          <Select value={f.type} onValueChange={(val)=> { const arr=[...editLoginFields]; arr[idx] = { ...arr[idx], type: val as DynamicFieldType }; setEditLoginFields(arr); }}>
+                            <SelectTrigger className="col-span-2"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {['text','email','tel','date','number','textarea'].map(t => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
+                            </SelectContent>
+                          </Select>
+                          <Input className="col-span-5" placeholder="Placeholder" value={f.placeholder || ''} onChange={(e)=> { const arr=[...editLoginFields]; arr[idx] = { ...arr[idx], placeholder: e.target.value }; setEditLoginFields(arr); }} />
+                          <div className="col-span-1 flex items-center justify-center">
+                            <Switch checked={!!f.required} onCheckedChange={(checked)=> { const arr=[...editLoginFields]; arr[idx] = { ...arr[idx], required: !!checked }; setEditLoginFields(arr); }} />
+                          </div>
+                          <Button variant="ghost" size="icon" className="col-span-1" onClick={()=> setEditLoginFields(editLoginFields.filter((_,i)=> i!==idx))}>
+                            <Trash2 size={16} className="text-red-500" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      {/* Add field */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={()=> setEditLoginFields([...editLoginFields, { id: Date.now().toString(), name: 'New Field', type: 'text', required: false, placeholder: '' }])}
+                      >
+                        <Plus size={16} className="mr-2" /> Add Field
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="flex gap-2">
+              <Button variant="outline" onClick={()=> setIsEditOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveEdit} className="bg-purple-600 hover:bg-purple-700">Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
 }
+
+// Edit dialog UI appended below component return above would be preferred, but keeping inside file scope

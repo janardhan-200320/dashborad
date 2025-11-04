@@ -22,6 +22,10 @@ export interface IStorage {
   checkResourceAvailability(resourceId: string, startTime: string, endTime: string): Promise<boolean>;
   cancelResourceBooking(id: string): Promise<ResourceBooking | undefined>;
   getResourceStats(resourceId: string, startDate?: string, endDate?: string): Promise<any>;
+
+  // Appointments (sales call bookings)
+  createAppointment(appointment: InsertAppointment): Promise<Appointment>;
+  getAppointments(): Promise<Appointment[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -29,12 +33,14 @@ export class MemStorage implements IStorage {
   private onboardings: Map<string, Onboarding>;
   private resources: Map<string, Resource>;
   private resourceBookings: Map<string, ResourceBooking>;
+  private appointments: Map<string, Appointment>;
 
   constructor() {
     this.users = new Map();
     this.onboardings = new Map();
     this.resources = new Map();
     this.resourceBookings = new Map();
+    this.appointments = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -277,6 +283,34 @@ export class MemStorage implements IStorage {
       },
     };
   }
+
+  // ========== APPOINTMENTS (Simple in-memory) ==========
+
+  async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {
+    const id = randomUUID();
+    const apt: Appointment = { id, ...insertAppointment };
+    this.appointments.set(id, apt);
+    return apt;
+  }
+
+  async getAppointments(): Promise<Appointment[]> {
+    return Array.from(this.appointments.values());
+  }
 }
 
 export const storage = new MemStorage();
+
+// Lightweight appointment types (in-memory only)
+export interface Appointment {
+  id: string;
+  customerName: string;
+  email: string;
+  phone?: string;
+  serviceName: string;
+  date: string; // YYYY-MM-DD
+  time: string; // e.g., 10:30 AM
+  status: 'upcoming' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+export type InsertAppointment = Omit<Appointment, 'id'>;
