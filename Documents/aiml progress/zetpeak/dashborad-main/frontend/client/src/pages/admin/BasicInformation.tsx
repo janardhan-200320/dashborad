@@ -56,11 +56,16 @@ export default function BasicInformation() {
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Building2 size={32} className="text-gray-400" />
+            <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+              {orgData.logo ? (
+                <img src={orgData.logo} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <Building2 size={32} className="text-gray-400" />
+              )}
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900">{orgData.businessName}</h2>
+              <p className="text-sm text-gray-500">Organization Logo</p>
             </div>
           </div>
           <Button 
@@ -131,6 +136,38 @@ export default function BasicInformation() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="flex flex-col items-center gap-4 mb-4">
+              <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center border-2 border-gray-200">
+                {editData.logo ? (
+                  <img src={editData.logo} alt="Logo" className="w-full h-full object-cover" />
+                ) : (
+                  <Building2 size={40} className="text-gray-400" />
+                )}
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => document.getElementById('logo-upload')?.click()}
+              >
+                Upload Logo
+              </Button>
+              <input
+                id="logo-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    setEditData({ ...editData, logo: reader.result as string });
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </div>
+            
             <div className="space-y-2">
               <Label>Business Name *</Label>
               <Input

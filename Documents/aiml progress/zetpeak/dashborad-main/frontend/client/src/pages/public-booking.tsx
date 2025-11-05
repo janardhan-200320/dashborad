@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRoute } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,11 +29,21 @@ import {
   type CalendarEvent 
 } from '@/lib/calendar-utils';
 
+type DynamicFieldType = 'text' | 'email' | 'tel' | 'date' | 'number' | 'textarea';
+interface LoginField {
+  id: string;
+  name: string;
+  type: DynamicFieldType;
+  required: boolean;
+  placeholder?: string;
+}
+
 interface Service {
   id: string;
   name: string;
   description: string;
   duration: string;
+  durationMinutes: number;
   locationType: 'in-person' | 'phone' | 'video' | 'custom';
   hostName: string;
   color: string;
@@ -52,104 +62,185 @@ export default function PublicBookingPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [service, setService] = useState<Service | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    notes: ''
-  });
+  const [callData, setCallData] = useState<any | null>(null);
+  // Dynamic booking form fields driven by Admin Center -> Customer Login Preferences
+  const [loginFields, setLoginFields] = useState<LoginField[]>([]);
+  const [formData, setFormData] = useState<Record<string, string>>({});
 
-  // Load service data from localStorage
+  // Load booking form field configuration
   useEffect(() => {
-    console.log('Loading service with ID:', serviceId);
-    
-    try {
-      const savedCalls = localStorage.getItem('zervos_sales_calls');
-      console.log('Saved calls from localStorage:', savedCalls);
-      
-      let foundService = false;
-      
-      if (savedCalls && serviceId) {
-        const calls = JSON.parse(savedCalls);
-        console.log('Parsed calls:', calls);
-        const salesCall = calls.find((call: any) => call.id === serviceId);
-        console.log('Found sales call:', salesCall);
-        
-        if (salesCall) {
-          foundService = true;
-          
-          // Get assigned salesperson name
-          let hostName = 'Bharath Reddy';
-          if (salesCall.assignedSalespersons && salesCall.assignedSalespersons.length > 0) {
-            // Mock salespersons - in real app, fetch from database
-            const salespersons = [
-              { id: '1', name: 'Bharath Reddy' },
-              { id: '2', name: 'Sarah Johnson' },
-              { id: '3', name: 'Mike Williams' },
-            ];
-            const assignedPerson = salespersons.find(sp => sp.id === salesCall.assignedSalespersons[0]);
-            if (assignedPerson) hostName = assignedPerson.name;
-          }
-
-          // Map meeting mode to location type
-          let locationType: 'in-person' | 'phone' | 'video' | 'custom' = 'video';
-          if (salesCall.meetingMode === 'phone') locationType = 'phone';
-          else if (salesCall.meetingMode === 'in-person') locationType = 'in-person';
-          else if (salesCall.meetingMode === 'custom') locationType = 'custom';
-          else if (salesCall.meetingMode === 'video') locationType = 'video';
-
-          // Format duration
-          const hours = parseInt(salesCall.duration?.hours || '0');
-          const minutes = parseInt(salesCall.duration?.minutes || '30');
-          let durationText = '';
-          if (hours > 0) durationText += `${hours} hour${hours > 1 ? 's' : ''}`;
-          if (minutes > 0) durationText += `${hours > 0 ? ' ' : ''}${minutes} mins`;
-
-          console.log('Setting service with data:', {
-            name: salesCall.name,
-            description: salesCall.description,
-            duration: durationText,
-            hostName,
-            locationType
-          });
-
-          setService({
-            id: salesCall.id,
-            name: salesCall.name,
-            description: salesCall.description || 'Book your appointment for this service',
-            duration: durationText || '30 mins',
-            locationType: locationType,
-            hostName: hostName,
-            color: 'from-purple-500 to-pink-500'
-          });
+    // Helper to load organization defaults
+    const loadOrgDefaults = () => {
+      try {
+        const raw = localStorage.getItem('zervos_login_prefs');
+        if (raw) {
+          const prefs = JSON.parse(raw);
+          const fields: LoginField[] = Array.isArray(prefs.loginFields) ? prefs.loginFields : [];
+          setLoginFields(fields);
+          const init: Record<string, string> = {};
+          fields.forEach((f) => { init[f.id] = ''; });
+          setFormData((prev) => ({ ...init, ...prev }));
+          return;
         }
+      } catch {}
+      // Default fields when none configured or on error
+      const defaults: LoginField[] = [
+        { id: 'full_name', name: 'Full Name', type: 'text', required: true, placeholder: 'Enter your full name' },
+        { id: 'email', name: 'Email Address', type: 'email', required: true, placeholder: 'your@email.com' },
+        { id: 'phone', name: 'Contact Number', type: 'tel', required: true, placeholder: '+1 (555) 123-4567' },
+        { id: 'notes', name: 'Additional Notes', type: 'textarea', required: false, placeholder: 'Anything we should know?' },
+      ];
+      setLoginFields(defaults);
+      const init: Record<string, string> = {};
+      defaults.forEach((f) => { init[f.id] = ''; });
+      setFormData((prev) => ({ ...init, ...prev }));
+    };
+
+    // Prefer per-call custom fields when explicitly set
+    if (callData && callData.useOrgFormFields === false && Array.isArray(callData.customFormFields) && callData.customFormFields.length > 0) {
+      const fields: LoginField[] = callData.customFormFields;
+      setLoginFields(fields);
+      const init: Record<string, string> = {};
+      fields.forEach((f) => { init[f.id] = ''; });
+      setFormData((prev) => ({ ...init, ...prev }));
+    } else {
+      loadOrgDefaults();
+    }
+  }, [callData]);
+
+  // Load service data dynamically from localStorage (workspace-aware)
+  useEffect(() => {
+    try {
+      if (!serviceId) return;
+
+      // Helper: get all localStorage keys that match prefix
+      const getKeysByPrefix = (prefix: string) => {
+        const keys: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(prefix)) keys.push(k);
+        }
+        return keys;
+      };
+
+      // 1) Find the sales call by id across all workspace-scoped keys (and global fallback)
+      const callKeys = [
+        ...getKeysByPrefix('zervos_sales_calls::'),
+        'zervos_sales_calls'
+      ];
+
+      let salesCall: any | null = null;
+      let workspaceIdForCall: string | null = null;
+      for (const key of callKeys) {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) {
+            const found = arr.find((c: any) => c?.id === serviceId);
+            if (found) {
+              salesCall = found;
+              workspaceIdForCall = key.includes('::') ? key.split('::')[1] : null;
+              break;
+            }
+          }
+        } catch {}
       }
-      
-      // Fallback to default if not found
-      if (!foundService) {
-        console.log('No sales call found, using default');
+
+      if (!salesCall) {
+        // Fallback default if not found
         setService({
-          id: serviceId || '1',
+          id: serviceId,
           name: 'Lead Qualification Session',
           description: 'Initial consultation to understand your needs and see how we can help',
           duration: '30 mins',
+          durationMinutes: 30,
           locationType: 'video',
           hostName: 'Bharath Reddy',
           color: 'from-purple-500 to-pink-500'
         });
+        return;
       }
+
+      // 2) Resolve host name from assignedSalespersons via workspace/global member lists
+      const primaryAssigneeId = Array.isArray(salesCall.assignedSalespersons) && salesCall.assignedSalespersons.length > 0
+        ? salesCall.assignedSalespersons[0]
+        : null;
+
+      const resolveMemberName = (id: string | null): string => {
+        if (!id) return 'Team Member';
+        const candidateKeys: string[] = [];
+        if (workspaceIdForCall) {
+          candidateKeys.push(`zervos_team_members::${workspaceIdForCall}`);
+          candidateKeys.push(`zervos_salespersons::${workspaceIdForCall}`);
+        }
+        // Add globals
+        candidateKeys.push('zervos_team_members');
+        candidateKeys.push('zervos_salespersons');
+        // As a last resort, scan all potential team member keys across all workspaces
+        const allMemberKeys = [
+          ...getKeysByPrefix('zervos_team_members::'),
+          ...getKeysByPrefix('zervos_salespersons::')
+        ];
+        for (const k of allMemberKeys) if (!candidateKeys.includes(k)) candidateKeys.push(k);
+
+        for (const key of candidateKeys) {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          try {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              const m = arr.find((x: any) => x?.id === id || x?.email === id);
+              if (m) return m.name || m.email || 'Team Member';
+            }
+          } catch {}
+        }
+        return 'Team Member';
+      };
+
+      const hostName = resolveMemberName(primaryAssigneeId);
+
+      // 3) Map meeting mode to location type
+      let locationType: 'in-person' | 'phone' | 'video' | 'custom' = 'video';
+      if (salesCall.meetingMode === 'phone') locationType = 'phone';
+      else if (salesCall.meetingMode === 'in-person') locationType = 'in-person';
+      else if (salesCall.meetingMode === 'custom') locationType = 'custom';
+      else if (salesCall.meetingMode === 'video') locationType = 'video';
+
+      // 4) Format duration and compute minutes
+      const hours = parseInt(salesCall.duration?.hours || '0');
+      const minutes = parseInt(salesCall.duration?.minutes || '30');
+      const totalMinutes = (isNaN(hours) ? 0 : hours) * 60 + (isNaN(minutes) ? 0 : minutes);
+      let durationText = '';
+      if ((hours || 0) > 0) durationText += `${hours} hour${hours > 1 ? 's' : ''}`;
+      if ((minutes || 0) > 0) durationText += `${hours > 0 ? ' ' : ''}${minutes} mins`;
+      if (!durationText) durationText = '30 mins';
+
+      // 5) Set service and expose raw call data
+      setService({
+        id: salesCall.id,
+        name: salesCall.name,
+        description: salesCall.description || 'Book your appointment for this service',
+        duration: durationText,
+        durationMinutes: totalMinutes || 30,
+        locationType,
+        hostName,
+        color: 'from-purple-500 to-pink-500'
+      });
+      setCallData(salesCall);
     } catch (error) {
-      console.error('Error loading service:', error);
-      // Fallback to default
+      // Fallback to default on error
       setService({
         id: serviceId || '1',
         name: 'Lead Qualification Session',
         description: 'Initial consultation to understand your needs and see how we can help',
         duration: '30 mins',
+        durationMinutes: 30,
         locationType: 'video',
         hostName: 'Bharath Reddy',
         color: 'from-purple-500 to-pink-500'
       });
+      setCallData(null);
     }
   }, [serviceId]);
 
@@ -235,7 +326,40 @@ export default function PublicBookingPage() {
   const handleContinue = () => {
     if (step === 1 && selectedDate && selectedTime) {
       setStep(2);
-    } else if (step === 2 && formData.name && formData.email) {
+    } else if (step === 2) {
+      // Validate required dynamic fields
+      const allValid = loginFields.every((f) => !f.required || (formData[f.id] && formData[f.id].trim().length > 0));
+      if (!allValid) return;
+
+      // Persist appointment to backend
+      const emailField = loginFields.find(f => f.type === 'email');
+      const nameField = loginFields.find(f => f.name.toLowerCase().includes('name'));
+      const phoneField = loginFields.find(f => f.type === 'tel');
+
+      const payload = {
+        customerName: (nameField && formData[nameField.id]) || formData['full_name'] || 'Customer',
+        email: (emailField && formData[emailField.id]) || '',
+        phone: (phoneField && formData[phoneField.id]) || formData['phone'] || '',
+        serviceName: service?.name || 'Service',
+        date: selectedDate ? selectedDate.toISOString().split('T')[0] : '',
+        time: selectedTime || '',
+        status: 'upcoming' as const,
+        notes: (() => {
+          // Concatenate non-standard fields as notes
+          const exclude = new Set([emailField?.id, nameField?.id, phoneField?.id, 'full_name', 'email', 'phone'].filter(Boolean) as string[]);
+          const parts = Object.entries(formData)
+            .filter(([k, v]) => !exclude.has(k) && (v ?? '').toString().trim().length > 0)
+            .map(([k, v]) => `${k}: ${v}`);
+          return parts.join('\n');
+        })(),
+      };
+
+      fetch('/api/appointments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => { /* ignore for now */ });
+
       setStep(3);
     }
   };
@@ -250,12 +374,12 @@ export default function PublicBookingPage() {
     const { start, end} = createEventDate(
       selectedDate.toISOString().split('T')[0],
       selectedTime,
-      30 // Default 30 minutes duration
+      service?.durationMinutes || 30 // Use actual duration
     );
 
     const event: CalendarEvent = {
       title: service.name,
-      description: `Meeting with ${service.hostName}\n\n${formData.notes || ''}`,
+      description: `Meeting with ${service.hostName}`,
       location: getLocationText(),
       startTime: start,
       endTime: end,
@@ -271,12 +395,12 @@ export default function PublicBookingPage() {
     const { start, end } = createEventDate(
       selectedDate.toISOString().split('T')[0],
       selectedTime,
-      30
+      service?.durationMinutes || 30
     );
 
     const event: CalendarEvent = {
       title: service.name,
-      description: `Meeting with ${service.hostName}\n\n${formData.notes || ''}`,
+      description: `Meeting with ${service.hostName}`,
       location: getLocationText(),
       startTime: start,
       endTime: end,
@@ -292,12 +416,12 @@ export default function PublicBookingPage() {
     const { start, end } = createEventDate(
       selectedDate.toISOString().split('T')[0],
       selectedTime,
-      30
+      service?.durationMinutes || 30
     );
 
     const event: CalendarEvent = {
       title: service.name,
-      description: `Meeting with ${service.hostName}\n\n${formData.notes || ''}`,
+      description: `Meeting with ${service.hostName}`,
       location: getLocationText(),
       startTime: start,
       endTime: end,
@@ -549,48 +673,30 @@ export default function PublicBookingPage() {
                     </div>
 
                     <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Full Name *</Label>
-                        <Input
-                          id="name"
-                          placeholder="John Doe"
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Email Address *</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="john@example.com"
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number (Optional)</Label>
-                        <Input
-                          id="phone"
-                          type="tel"
-                          placeholder="+1 234 567 8900"
-                          value={formData.phone}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="notes">Additional Notes (Optional)</Label>
-                        <Textarea
-                          id="notes"
-                          placeholder="Tell us anything that will help prepare for our meeting..."
-                          value={formData.notes}
-                          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                          rows={4}
-                        />
-                      </div>
+                      {loginFields.map((field) => (
+                        <div key={field.id} className="space-y-2">
+                          <Label htmlFor={field.id}>
+                            {field.name} {field.required && <span className="text-red-500">*</span>}
+                          </Label>
+                          {field.type === 'textarea' ? (
+                            <Textarea
+                              id={field.id}
+                              placeholder={field.placeholder || ''}
+                              value={formData[field.id] || ''}
+                              onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                              rows={4}
+                            />
+                          ) : (
+                            <Input
+                              id={field.id}
+                              type={field.type}
+                              placeholder={field.placeholder || ''}
+                              value={formData[field.id] || ''}
+                              onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                            />
+                          )}
+                        </div>
+                      ))}
                     </div>
 
                     {/* Buttons */}
@@ -600,7 +706,7 @@ export default function PublicBookingPage() {
                       </Button>
                       <Button
                         onClick={handleContinue}
-                        disabled={!formData.name || !formData.email}
+                        disabled={!loginFields.every((f) => !f.required || (formData[f.id] && formData[f.id].trim().length > 0))}
                         className="bg-purple-600 hover:bg-purple-700"
                         size="lg"
                       >
@@ -650,7 +756,9 @@ export default function PublicBookingPage() {
                           <Mail size={18} className="text-purple-600 mt-0.5" />
                           <div>
                             <p className="font-medium text-gray-900">Confirmation Sent</p>
-                            <p className="text-sm text-gray-600">{formData.email}</p>
+                            <p className="text-sm text-gray-600">{
+                              (loginFields.find(f => f.type === 'email') && formData[loginFields.find(f => f.type === 'email')!.id]) || ''
+                            }</p>
                           </div>
                         </div>
                       </CardContent>

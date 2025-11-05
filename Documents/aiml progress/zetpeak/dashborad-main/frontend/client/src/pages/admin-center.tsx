@@ -5,6 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+
+// Types
+interface SettingCard {
+  icon: any;
+  title: string;
+  options: string[];
+}
+
+interface SettingSection {
+  title: string;
+  cards: SettingCard[];
+}
 import { 
   ArrowLeft, 
   Search, 
@@ -84,22 +96,11 @@ interface Integration {
   apiKey?: string;
 }
 
-interface SettingCard {
-  icon: any;
-  title: string;
-  options: string[];
-}
-
-interface SettingSection {
-  title: string;
-  cards: SettingCard[];
-}
-
 export default function AdminCenterPage() {
   const [, setLocation] = useLocation();
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('organization');
   const { toast } = useToast();
-  const [searchQuery, setSearchQuery] = useState('');
   
   // Organization Settings
   const [orgSettings, setOrgSettings] = useState<OrganizationSettings>({
@@ -304,10 +305,10 @@ export default function AdminCenterPage() {
 
   const filteredSections = sections.map(section => ({
     ...section,
-    cards: section.cards.filter((card: SettingCard) => 
+    cards: section.cards.filter(card => 
       searchQuery === '' || 
       card.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.options.some((option: string) => option.toLowerCase().includes(searchQuery.toLowerCase()))
+      card.options.some(option => option.toLowerCase().includes(searchQuery.toLowerCase()))
     )
   })).filter(section => section.cards.length > 0);
 
@@ -358,44 +359,20 @@ export default function AdminCenterPage() {
               <div key={sectionIndex}>
                 <h2 className="text-xl font-semibold text-gray-900 mb-6">{section.title}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {section.cards.map((card: SettingCard, cardIndex: number) => {
+                  {section.cards.map((card, cardIndex) => {
                     const Icon = card.icon;
-                    
-                    // Define navigation logic for Product Customizations cards
                     const handleCardClick = () => {
-                      if (section.title === 'Product Customizations') {
-                        let sectionParam = '';
-                        switch (card.title) {
-                          case 'Custom Domain':
-                            sectionParam = 'custom-domain';
-                            break;
-                          case 'In-product Notifications':
-                            sectionParam = 'in-product';
-                            break;
-                          case 'Custom Labels':
-                            sectionParam = 'labels';
-                            break;
-                          case 'Roles and Permissions':
-                            sectionParam = 'roles';
-                            break;
-                        }
-                        if (sectionParam) {
-                          setLocation(`/dashboard/admin/customizations?section=${sectionParam}`);
-                        }
-                      } else if (section.title === 'Data Administration') {
-                        if (card.title === 'Export') {
-                          setLocation('/dashboard/admin/data-admin?section=export');
-                        }
-                        // Add navigation for other data admin sections as needed
+                      if (card.title === 'Workspaces') {
+                        setLocation('/dashboard/admin-center/workspaces');
+                      } else if (card.title === 'Resources') {
+                        setLocation('/dashboard/admin-center/resources');
                       }
-                      // Add navigation for other sections as needed
                     };
-                    
                     return (
                       <div 
                         key={cardIndex}
-                        className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
                         onClick={handleCardClick}
+                        className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
                       >
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">
@@ -407,7 +384,7 @@ export default function AdminCenterPage() {
                           <ChevronRight size={20} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
                         </div>
                         <ul className="space-y-2">
-                          {card.options.map((option: string, optionIndex: number) => (
+                          {card.options.map((option, optionIndex) => (
                             <li 
                               key={optionIndex}
                               className="text-sm text-gray-600 hover:text-purple-600 transition-colors flex items-center gap-2"

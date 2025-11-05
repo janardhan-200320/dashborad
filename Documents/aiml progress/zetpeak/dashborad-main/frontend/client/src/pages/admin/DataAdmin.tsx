@@ -1,16 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
-import { Download, FileDown, FileUp } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type DataAdminSection = 'privacy' | 'domain-auth' | 'export';
 
@@ -18,122 +8,12 @@ interface DataAdminProps {
   initialSection?: DataAdminSection;
 }
 
-interface ExportOptions {
-  module: string;
-  format: 'csv' | 'json';
-  dateFrom?: string;
-  dateTo?: string;
-  status?: string;
-}
-
 export default function DataAdmin({ initialSection }: DataAdminProps) {
   const [section, setSection] = useState<DataAdminSection>(initialSection ?? 'export');
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportOptions, setExportOptions] = useState<ExportOptions>({
-    module: 'appointments',
-    format: 'csv'
-  });
-  const { toast } = useToast();
 
   useEffect(() => {
     if (initialSection) setSection(initialSection);
   }, [initialSection]);
-
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      const params = new URLSearchParams({
-        format: exportOptions.format
-      });
-
-      // Add optional parameters
-      if (exportOptions.dateFrom) params.append('date_from', exportOptions.dateFrom);
-      if (exportOptions.dateTo) params.append('date_to', exportOptions.dateTo);
-      if (exportOptions.status) params.append('status', exportOptions.status);
-
-      const response = await fetch(`http://localhost:8000/api/export/${exportOptions.module}?${params}`, {
-        method: 'GET',
-      });
-
-      if (!response.ok) {
-        throw new Error('Export failed');
-      }
-
-      // Handle file download
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      
-      // Get filename from response headers or generate one
-      const contentDisposition = response.headers.get('content-disposition');
-      let filename = `${exportOptions.module}_export.${exportOptions.format}`;
-      
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
-      }
-      
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      toast({
-        title: 'Export completed',
-        description: `${filename} has been downloaded successfully.`
-      });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast({
-        title: 'Export failed',
-        description: 'There was an error exporting your data. Please try again.',
-        variant: 'destructive'
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleBulkExport = async () => {
-    setIsExporting(true);
-    try {
-      const response = await fetch('http://localhost:8000/api/export/all?format=json', {
-        method: 'GET',
-      });
-
-      if (!response.ok) {
-        throw new Error('Bulk export failed');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'full_export.json';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      toast({
-        title: 'Bulk export completed',
-        description: 'full_export.json has been downloaded successfully.'
-      });
-    } catch (error) {
-      console.error('Bulk export error:', error);
-      toast({
-        title: 'Bulk export failed',
-        description: 'There was an error exporting your data. Please try again.',
-        variant: 'destructive'
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   return (
     <div className="p-8">
@@ -203,152 +83,52 @@ export default function DataAdmin({ initialSection }: DataAdminProps) {
         {section === 'export' && (
           <div>
             <h1 className="text-2xl font-semibold">Export Data</h1>
-            <p className="text-gray-600 mt-2">Export bookings, customers or other records as CSV or JSON files.</p>
+            <p className="text-gray-600 mt-2">Export bookings, customers or other records as CSV/XLSX.</p>
 
-            <div className="mt-6 space-y-6">
-              {/* Individual Export */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileDown size={20} />
-                    Export Individual Module
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Module</label>
-                      <Select 
-                        value={exportOptions.module} 
-                        onValueChange={(value) => setExportOptions(prev => ({ ...prev, module: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="appointments">Appointments</SelectItem>
-                          <SelectItem value="customers">Customers</SelectItem>
-                          <SelectItem value="services">Services</SelectItem>
-                          <SelectItem value="team-members">Team Members</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+            <div className="mt-6 bg-white border border-gray-100 rounded-md p-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Module</label>
+                  <select className="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2 text-sm">
+                    <option>Appointments</option>
+                    <option>Customers</option>
+                    <option>Payments</option>
+                  </select>
+                </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
-                      <Select 
-                        value={exportOptions.format} 
-                        onValueChange={(value: 'csv' | 'json') => setExportOptions(prev => ({ ...prev, format: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="csv">CSV</SelectItem>
-                          <SelectItem value="json">JSON</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">File Name</label>
+                  <Input placeholder="Export - 31 Oct 2025" className="mt-1" />
+                </div>
 
-                    {exportOptions.module === 'appointments' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Status Filter</label>
-                        <Select 
-                          value={exportOptions.status || 'all'} 
-                          onValueChange={(value) => setExportOptions(prev => ({ ...prev, status: value === 'all' ? undefined : value }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="All statuses" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All statuses</SelectItem>
-                            <SelectItem value="upcoming">Upcoming</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Date Range</label>
+                  <Input placeholder="31-Oct-2025 to 31-Oct-2025" className="mt-1" />
+                </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Date From</label>
-                      <Input 
-                        type="date"
-                        value={exportOptions.dateFrom || ''}
-                        onChange={(e) => setExportOptions(prev => ({ ...prev, dateFrom: e.target.value }))}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Date To</label>
-                      <Input 
-                        type="date"
-                        value={exportOptions.dateTo || ''}
-                        onChange={(e) => setExportOptions(prev => ({ ...prev, dateTo: e.target.value }))}
-                      />
-                    </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Export As</label>
+                  <div className="mt-1 space-x-4">
+                    <label className="inline-flex items-center gap-2"><input type="radio" name="export-as" defaultChecked /> CSV</label>
+                    <label className="inline-flex items-center gap-2"><input type="radio" name="export-as" /> XLSX</label>
                   </div>
+                </div>
 
-                  <div className="mt-6">
-                    <Button 
-                      onClick={handleExport} 
-                      disabled={isExporting}
-                      className="flex items-center gap-2"
-                    >
-                      <Download size={16} />
-                      {isExporting ? 'Exporting...' : 'Export Data'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Fields</label>
+                  <select className="mt-1 block w-full rounded-md border-gray-200 shadow-sm p-2 text-sm">
+                    <option>7 Fields Selected</option>
+                  </select>
+                </div>
 
-              {/* Bulk Export */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileUp size={20} />
-                    Bulk Export All Data
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Export all your data including appointments, customers, services, team members, workspaces, resources, locations, integrations, custom labels, and roles in a single JSON file.
-                  </p>
-                  
-                  <Button 
-                    onClick={handleBulkExport} 
-                    disabled={isExporting}
-                    variant="outline"
-                    className="flex items-center gap-2"
-                  >
-                    <Download size={16} />
-                    {isExporting ? 'Exporting...' : 'Export All Data'}
-                  </Button>
-                </CardContent>
-              </Card>
+                <div className="flex items-start">
+                  <label className="inline-flex items-center gap-2 mt-6"><input type="checkbox" /> Include Custom Fields</label>
+                </div>
+              </div>
 
-              {/* Export History/Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Export Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3 text-sm text-gray-600">
-                    <div>
-                      <strong>CSV Format:</strong> Comma-separated values, compatible with Excel and most spreadsheet applications.
-                    </div>
-                    <div>
-                      <strong>JSON Format:</strong> JavaScript Object Notation, suitable for developers and data analysis tools.
-                    </div>
-                    <div>
-                      <strong>Date Filters:</strong> Only available for appointments. Leave empty to export all records.
-                    </div>
-                    <div>
-                      <strong>File Naming:</strong> Files are automatically named with the module name and current date.
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="mt-6 border-t pt-4">
+                <Button>Export</Button>
+              </div>
             </div>
           </div>
         )}
