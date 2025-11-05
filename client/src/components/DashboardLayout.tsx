@@ -96,7 +96,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
     <LayoutGroup>
       {[...navigation, { divider: true }, ...secondaryNavigation].map((item) => {
         if ('divider' in item) {
-          return <div key="divider" className="mx-4 my-4 h-px bg-slate-200" />;
+          return <div key="divider" className="mx-4 my-4 h-px bg-slate-700" />;
         }
 
         const active = isActive(item.path);
@@ -108,7 +108,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
               onMouseLeave={() => setHoveredNav(prev => (prev === item.path ? null : prev))}
               className={`relative flex items-center ${
                 expanded ? 'gap-3 px-4 py-3' : 'justify-center px-2 py-3'
-              } text-sm font-medium text-slate-600 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 rounded-xl overflow-visible`}
+              } text-sm font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 rounded-xl overflow-visible`}
             >
               <motion.span
                 className="relative z-10 flex items-center justify-center"
@@ -116,27 +116,27 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
                 animate={{ scale: active ? 1.05 : 1 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 25 }}
               >
-                <item.icon size={20} className={active ? 'text-brand-600' : 'text-slate-400'} />
+                <item.icon size={20} className={active ? 'text-white' : 'text-slate-300'} />
               </motion.span>
 
-              {expanded && <span className={`relative z-10 ${active ? 'text-brand-700' : 'text-slate-600'}`}>{item.name}</span>}
+              {expanded && <span className={`relative z-10 font-medium ${active ? 'text-white' : 'text-slate-200'}`}>{item.name}</span>}
 
               {active && (
                 <motion.span
                   layoutId="nav-active"
-                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-500/10 to-purple-500/10 shadow-[0_12px_30px_-15px_rgba(79,70,229,0.45)] border border-brand-200/70"
+                  className="absolute inset-0 rounded-xl bg-slate-700 shadow-lg"
                   transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                 />
               )}
 
               <AnimatePresence>
-                {!expanded && hoveredNav === item.path && (
+        {hoveredNav === item.path && (
                   <motion.span
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 4 }}
                     transition={{ duration: 0.2 }}
-                    className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-lg ring-1 ring-slate-200"
+                    className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-slate-700 px-3 py-1 text-xs font-semibold text-white shadow-lg ring-1 ring-slate-600"
                   >
                     {item.name}
                   </motion.span>
@@ -154,7 +154,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
       initial={false}
       animate={{ width: expanded ? 280 : 96 }}
       transition={{ type: 'spring', stiffness: 200, damping: 28 }}
-      className="relative z-30 hidden h-full flex-col overflow-hidden border-r border-slate-200 bg-white/90 text-slate-800 shadow-2xl backdrop-blur-xl lg:flex"
+      className="relative z-30 hidden h-full flex-col overflow-hidden border-r border-slate-700 bg-slate-800 text-white shadow-2xl lg:flex"
     >
       <div className="relative px-4 pb-4 pt-6">
         <div className="mb-6 flex items-center justify-between gap-3">
@@ -171,14 +171,14 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             </motion.div>
             {expanded && (
               <div>
-                <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-800">
-                  <Sparkles size={14} className="text-brand-500" />
-                  <span>Zervos Admin</span>
+                <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white">
+                  <Sparkles size={14} className="text-brand-400" />
+                  <span>Zervos</span>
                 </div>
                 {company ? (
-                  <p className="text-xs text-slate-500">{company.name}</p>
+                  <p className="text-xs text-slate-400">{company.name}</p>
                 ) : (
-                  <p className="text-xs text-slate-500">Crafting stellar bookings</p>
+                  <p className="text-xs text-slate-400">bharath</p>
                 )}
               </div>
             )}
@@ -187,7 +187,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setSidebarExpanded(!expanded)}
-            className="hidden rounded-lg bg-white p-2 text-slate-500 shadow-inner ring-1 ring-slate-200/60 transition lg:inline-flex"
+            className="hidden rounded-lg bg-slate-700 p-2 text-slate-300 shadow-inner ring-1 ring-slate-600 transition hover:bg-slate-600 lg:inline-flex"
             aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
           >
             <Menu size={18} />
@@ -196,40 +196,10 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
 
         <WorkspaceSelector sidebarOpen={expanded} />
 
-        <div className="mt-2 flex-1 space-y-1 overflow-y-auto pb-6">
+        <div className="mt-4 flex-1 space-y-1 overflow-y-auto pb-6">
           {renderNavItems(expanded)}
         </div>
 
-        <div className="mt-auto rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-600">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 to-pink-400 shadow-lg">
-              <ShieldCheck className="h-5 w-5 text-white" />
-            </div>
-            {expanded && (
-              <div>
-                <p className="font-semibold text-slate-800">Pro Features</p>
-                <p className="text-[11px] text-slate-500">Unlock automated workflows and premium analytics.</p>
-              </div>
-            )}
-          </div>
-          {expanded && (
-            <AnimatedButton size="sm" className="w-full justify-center" onClick={() => setMobileSidebarOpen(false)}>
-              Explore Upgrades
-            </AnimatedButton>
-          )}
-        </div>
-
-        <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <ProfileDropdown />
-            {expanded && (
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Admin User</p>
-                <p className="text-xs text-slate-500">admin@zervos.com</p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </motion.aside>
   );
@@ -255,7 +225,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             animate={{ x: 0 }}
             exit={{ x: -320 }}
             transition={{ type: 'spring', stiffness: 220, damping: 30 }}
-            className="relative z-10 flex h-full w-80 flex-col overflow-y-auto border-r border-slate-200 bg-white text-slate-800 shadow-2xl backdrop-blur-xl"
+            className="relative z-10 flex h-full w-80 flex-col overflow-y-auto border-r border-slate-700 bg-slate-800 text-white shadow-2xl"
           >
             <div className="flex items-center justify-between px-5 py-6">
               <div className="flex items-center gap-3">
@@ -266,15 +236,15 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
                     <Building2 size={20} className="text-white" />
                   )}
                 </div>
-                <div className="text-slate-700">
-                  <p className="text-sm font-semibold">Zervos Admin</p>
-                  {company && <p className="text-xs text-slate-500">{company.name}</p>}
+                <div className="text-white">
+                  <p className="text-sm font-semibold">Zervos</p>
+                  {company && <p className="text-xs text-slate-400">{company.name}</p>}
                 </div>
               </div>
 
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                className="rounded-xl bg-slate-100 p-2 text-slate-500 ring-1 ring-slate-200"
+                className="rounded-xl bg-slate-700 p-2 text-slate-300 ring-1 ring-slate-600"
                 onClick={() => setMobileSidebarOpen(false)}
                 aria-label="Close navigation"
               >
@@ -288,22 +258,6 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
               {renderNavItems(true)}
             </div>
 
-            <div className="space-y-4 px-4 pb-6">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-sm font-semibold text-slate-800">Pro Features</p>
-                <p className="mt-1 text-xs text-slate-500">Unlock automated workflows and premium analytics.</p>
-                <AnimatedButton size="sm" className="mt-4 w-full justify-center" onClick={() => setMobileSidebarOpen(false)}>
-                  Explore Upgrades
-                </AnimatedButton>
-              </div>
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <ProfileDropdown />
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Admin User</p>
-                  <p className="text-xs text-slate-500">admin@zervos.com</p>
-                </div>
-              </div>
-            </div>
           </motion.aside>
         </motion.div>
       )}
@@ -311,7 +265,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   );
 
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-slate-100">
+    <div className="relative flex h-screen overflow-hidden bg-slate-100">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <motion.div
           animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.03, 1] }}
@@ -395,9 +349,6 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
                   </div>
                 </motion.div>
               )}
-              <AnimatedButton size="sm" className="hidden sm:inline-flex" onClick={() => window.dispatchEvent(new CustomEvent('open-create-booking'))}>
-                Create Booking Page
-              </AnimatedButton>
               <ProfileDropdown />
             </div>
           </div>

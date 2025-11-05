@@ -37,7 +37,8 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
+        // Match the dev server PORT used in package.json dev:server (currently 5001)
+        target: "http://localhost:5001",
         changeOrigin: true,
       },
     },
