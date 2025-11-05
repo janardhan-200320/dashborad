@@ -41,13 +41,17 @@ export default function AppointmentsNew() {
   useEffect(() => {
     // Prefer backend appointments if available, fallback to localStorage
     fetch('/api/appointments')
-      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(res => (res && res.ok ? res.json() : Promise.reject()))
       .then((data) => {
         if (Array.isArray(data)) setAppointments(data);
       })
       .catch(() => {
-        const saved = localStorage.getItem('zervos_appointments');
-        if (saved) setAppointments(JSON.parse(saved));
+        try {
+          const saved = localStorage.getItem('zervos_appointments');
+          if (saved) {
+            try { setAppointments(JSON.parse(saved)); } catch {}
+          }
+        } catch {}
       });
   }, []);
 
@@ -60,7 +64,7 @@ export default function AppointmentsNew() {
     
     const updated = [...appointments, appointment];
     setAppointments(updated);
-    localStorage.setItem('zervos_appointments', JSON.stringify(updated));
+  try { localStorage.setItem('zervos_appointments', JSON.stringify(updated)); } catch {}
 
     // Also send to backend for persistence across devices
     fetch('/api/appointments', {

@@ -34,16 +34,20 @@ export default function SubscriptionPage() {
   });
 
   useEffect(() => {
-    const subscriptionData = localStorage.getItem('zervos_subscription');
-    if (subscriptionData) {
-      const data = JSON.parse(subscriptionData);
-      setCurrentPlan(data.type);
-      setUsageData({
-        salespersons: data.salespersons,
-        workspaces: data.workspaces,
-        resources: data.resources
-      });
-    }
+    try {
+      const subscriptionData = localStorage.getItem('zervos_subscription');
+      if (subscriptionData) {
+        try {
+          const data = JSON.parse(subscriptionData);
+          setCurrentPlan(data?.type || 'Premium Trial');
+          setUsageData({
+            salespersons: data?.salespersons || { current: 1, max: 10 },
+            workspaces: data?.workspaces || { current: 1, max: 3 },
+            resources: data?.resources || { current: 0, max: 10 }
+          });
+        } catch {}
+      }
+    } catch {}
   }, []);
 
   const plans: SubscriptionPlan[] = [

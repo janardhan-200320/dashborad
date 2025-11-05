@@ -51,6 +51,7 @@ interface Workflow {
   availability?: Record<string, { enabled: boolean; start: string; end: string }>;
   useOrgFormFields?: boolean;
   customFormFields?: LoginField[];
+  limits?: Limits;
 }
 
 interface Salesperson {
@@ -67,6 +68,17 @@ interface LoginField {
   type: DynamicFieldType;
   required: boolean;
   placeholder?: string;
+}
+
+interface Limits {
+  maxPerDay?: number | null;
+  maxPerWeek?: number | null;
+  maxPerMonth?: number | null;
+  minNoticeHours?: number; // Minimum scheduling notice
+  bookingWindowDays?: number; // How far into the future
+  bufferBeforeMins?: number;
+  bufferAfterMins?: number;
+  maxPerCustomer?: number | null;
 }
 
 type BookingType = 'one-on-one' | 'group' | 'collective' | null;
@@ -169,7 +181,7 @@ export default function WorkflowsPage() {
   // ===== Edit workflow state =====
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
-  const [editTab, setEditTab] = useState<'details' | 'assign' | 'availability' | 'form'>('details');
+  const [editTab, setEditTab] = useState<'details' | 'assign' | 'availability' | 'form' | 'limits'>('details');
   const [editSelectedSalespersons, setEditSelectedSalespersons] = useState<string[]>([]);
   const [editLoginFields, setEditLoginFields] = useState<LoginField[]>([]);
   const [editSearchSalespersons, setEditSearchSalespersons] = useState('');
@@ -290,21 +302,51 @@ export default function WorkflowsPage() {
     if (salesCallsStorageKey) {
       try {
         localStorage.setItem(salesCallsStorageKey, JSON.stringify(items));
+        // Notify other views (e.g., Admin > Salespersons) that sales calls changed
+        window.dispatchEvent(new CustomEvent('sales-calls-updated', {
+          detail: { workspaceId: selectedWorkspace?.id }
+        }));
       } catch (error) {
         console.error('Error saving to localStorage:', error);
       }
     }
   };
 
-  const defaultAvailability = (): Record<string, { enabled: boolean; start: string; end: string }> => ({
-    Monday: { enabled: true, start: '09:00', end: '17:00' },
-    Tuesday: { enabled: true, start: '09:00', end: '17:00' },
-    Wednesday: { enabled: true, start: '09:00', end: '17:00' },
-    Thursday: { enabled: true, start: '09:00', end: '17:00' },
-    Friday: { enabled: true, start: '09:00', end: '17:00' },
-    Saturday: { enabled: false, start: '09:00', end: '13:00' },
-    Sunday: { enabled: false, start: '09:00', end: '13:00' },
-  });
+  const defaultAvailability = (): Record<string, { enabled: boolean; start: string; end: string }> => {
+    try {
+      const raw = localStorage.getItem('zervos_business_hours');
+      if (raw) {
+        const data = JSON.parse(raw);
+        const schedule = Array.isArray(data?.schedule) ? data.schedule : [];
+        const map: Record<string, { enabled: boolean; start: string; end: string }> = {};
+        const byDay: Record<string, any> = {};
+        schedule.forEach((d: any) => { byDay[d.day] = d; });
+        const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        days.forEach(day => {
+          const entry = byDay[day];
+          if (entry) {
+            map[day] = {
+              enabled: !!entry.enabled,
+              start: entry.startTime || '09:00',
+              end: entry.endTime || '17:00'
+            };
+          } else {
+            map[day] = { enabled: day !== 'Saturday' && day !== 'Sunday', start: '09:00', end: '17:00' };
+          }
+        });
+        return map;
+      }
+    } catch {}
+    return {
+      Monday: { enabled: true, start: '09:00', end: '17:00' },
+      Tuesday: { enabled: true, start: '09:00', end: '17:00' },
+      Wednesday: { enabled: true, start: '09:00', end: '17:00' },
+      Thursday: { enabled: true, start: '09:00', end: '17:00' },
+      Friday: { enabled: true, start: '09:00', end: '17:00' },
+      Saturday: { enabled: false, start: '09:00', end: '13:00' },
+      Sunday: { enabled: false, start: '09:00', end: '13:00' },
+    };
+  };
 
   // Open edit dialog for a workflow
   const handleOpenEdit = (wf: Workflow) => {
@@ -313,6 +355,16 @@ export default function WorkflowsPage() {
       availability: wf.availability || defaultAvailability(),
       useOrgFormFields: wf.useOrgFormFields !== false ? true : false,
       customFormFields: wf.customFormFields || [],
+      limits: wf.limits || {
+        maxPerDay: null,
+        maxPerWeek: null,
+        maxPerMonth: null,
+        minNoticeHours: 0,
+        bookingWindowDays: 60,
+        bufferBeforeMins: 0,
+        bufferAfterMins: 0,
+        maxPerCustomer: null,
+      }
     });
     setEditSelectedSalespersons(wf.assignedSalespersons || []);
     setEditLoginFields(wf.customFormFields || []);
@@ -1031,7 +1083,7 @@ export default function WorkflowsPage() {
 
             {/* Tabs */}
             <div className="flex gap-2 mt-2">
-              {(['details','assign','availability','form'] as const).map(t => (
+              {(['details','assign','availability','form','limits'] as const).map(t => (
                 <Button key={t} variant={editTab===t? 'default':'outline'} size="sm" onClick={() => setEditTab(t)}>
                   {t.charAt(0).toUpperCase()+t.slice(1)}
                 </Button>
@@ -1234,6 +1286,141 @@ export default function WorkflowsPage() {
                       </Button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* LIMITS TAB */}
+              {editTab === 'limits' && editingWorkflow && (
+                <div className="space-y-6">
+                  <div>
+                    <Label className="block mb-2">Daily appointment limit</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        type="number"
+                        placeholder="Unlimited"
+                        value={editingWorkflow.limits?.maxPerDay ?? ''}
+                        onChange={(e)=> setEditingWorkflow({
+                          ...editingWorkflow,
+                          limits: { ...(editingWorkflow.limits||{}), maxPerDay: e.target.value === '' ? null : Number(e.target.value) }
+                        })}
+                      />
+                      <div className="text-sm text-gray-500 self-center">Leave empty for unlimited</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="block mb-2">Weekly appointment limit</Label>
+                      <Input
+                        type="number"
+                        placeholder="Unlimited"
+                        value={editingWorkflow.limits?.maxPerWeek ?? ''}
+                        onChange={(e)=> setEditingWorkflow({
+                          ...editingWorkflow,
+                          limits: { ...(editingWorkflow.limits||{}), maxPerWeek: e.target.value === '' ? null : Number(e.target.value) }
+                        })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="block mb-2">Monthly appointment limit</Label>
+                      <Input
+                        type="number"
+                        placeholder="Unlimited"
+                        value={editingWorkflow.limits?.maxPerMonth ?? ''}
+                        onChange={(e)=> setEditingWorkflow({
+                          ...editingWorkflow,
+                          limits: { ...(editingWorkflow.limits||{}), maxPerMonth: e.target.value === '' ? null : Number(e.target.value) }
+                        })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="block mb-2">Minimum scheduling notice</Label>
+                      <Select
+                        value={String(editingWorkflow.limits?.minNoticeHours ?? 0)}
+                        onValueChange={(val)=> setEditingWorkflow({
+                          ...editingWorkflow,
+                          limits: { ...(editingWorkflow.limits||{}), minNoticeHours: Number(val) }
+                        })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[0,1,2,4,8,12,24,48,72,168].map(h => (
+                            <SelectItem key={h} value={String(h)}>{h} hour{h===1?'':'s'}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="block mb-2">Booking window</Label>
+                      <Select
+                        value={String(editingWorkflow.limits?.bookingWindowDays ?? 60)}
+                        onValueChange={(val)=> setEditingWorkflow({
+                          ...editingWorkflow,
+                          limits: { ...(editingWorkflow.limits||{}), bookingWindowDays: Number(val) }
+                        })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[7,14,30,60,90,180,365].map(d => (
+                            <SelectItem key={d} value={String(d)}>{d} days</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="block mb-2">Buffer before</Label>
+                      <Select
+                        value={String(editingWorkflow.limits?.bufferBeforeMins ?? 0)}
+                        onValueChange={(val)=> setEditingWorkflow({
+                          ...editingWorkflow,
+                          limits: { ...(editingWorkflow.limits||{}), bufferBeforeMins: Number(val) }
+                        })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[0,5,10,15,30,45,60].map(m => (
+                            <SelectItem key={m} value={String(m)}>{m} mins</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="block mb-2">Buffer after</Label>
+                      <Select
+                        value={String(editingWorkflow.limits?.bufferAfterMins ?? 0)}
+                        onValueChange={(val)=> setEditingWorkflow({
+                          ...editingWorkflow,
+                          limits: { ...(editingWorkflow.limits||{}), bufferAfterMins: Number(val) }
+                        })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[0,5,10,15,30,45,60].map(m => (
+                            <SelectItem key={m} value={String(m)}>{m} mins</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="block mb-2">Max bookings per customer</Label>
+                    <Input
+                      type="number"
+                      placeholder="Unlimited"
+                      value={editingWorkflow.limits?.maxPerCustomer ?? ''}
+                      onChange={(e)=> setEditingWorkflow({
+                        ...editingWorkflow,
+                        limits: { ...(editingWorkflow.limits||{}), maxPerCustomer: e.target.value === '' ? null : Number(e.target.value) }
+                      })}
+                    />
+                  </div>
                 </div>
               )}
             </div>

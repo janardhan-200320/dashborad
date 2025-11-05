@@ -105,6 +105,7 @@ export default function WorkspaceDetail() {
           return w;
         });
         localStorage.setItem('workspaces', JSON.stringify(updatedWorkspaces));
+        window.dispatchEvent(new Event('localStorageChanged'));
         
         const updated = updatedWorkspaces.find(w => w.id === workspace.id);
         if (updated) {
@@ -124,6 +125,7 @@ export default function WorkspaceDetail() {
         const workspaces: Workspace[] = JSON.parse(workspacesData);
         const updatedWorkspaces = workspaces.filter(w => w.id !== workspace.id);
         localStorage.setItem('workspaces', JSON.stringify(updatedWorkspaces));
+        window.dispatchEvent(new Event('localStorageChanged'));
         setLocation('/dashboard/admin-center');
       }
     }

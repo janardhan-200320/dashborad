@@ -230,9 +230,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== APPOINTMENTS ROUTES (in-memory) ==========
-  app.get("/api/appointments", async (_req, res) => {
+  app.get("/api/appointments", async (req, res) => {
     try {
-      const items = await storage.getAppointments();
+      const { assignedMemberId, serviceId, status } = req.query;
+      const items = await storage.getAppointments({
+        assignedMemberId: assignedMemberId as string | undefined,
+        serviceId: serviceId as string | undefined,
+        status: status as string | undefined,
+      });
       return res.json(items);
     } catch (error) {
       console.error("Error fetching appointments:", error);
@@ -252,6 +257,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: body.email,
         phone: body.phone,
         serviceName: body.serviceName,
+        serviceId: body.serviceId,
+        assignedMemberId: body.assignedMemberId,
+        assignedMemberName: body.assignedMemberName,
         date: body.date,
         time: body.time,
         status: body.status || 'upcoming',

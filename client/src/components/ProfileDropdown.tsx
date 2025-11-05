@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,45 +49,129 @@ interface SubscriptionData {
 export default function ProfileDropdown() {
   const [, setLocation] = useLocation();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Fetch user data from localStorage or use mock data
-  const getUserData = (): UserData => {
-    const orgData = localStorage.getItem('zervos_organization');
-    if (orgData) {
-      const org = JSON.parse(orgData);
-      return {
-        name: org.businessName || 'John Doe',
-        email: org.email || 'john.doe@example.com',
-        timezone: org.timezone || 'America/New_York',
-        avatar: org.avatar
-      };
-    }
+  // Listen for localStorage changes to refresh counts
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.startsWith('zervos_salespersons') || 
+          e.key === 'workspaces' || 
+          e.key?.startsWith('zervos_resources')) {
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom events for same-tab changes
+    const handleLocalChange = () => {
+      setRefreshKey(prev => prev + 1);
+    };
+    window.addEventListener('localStorageChanged', handleLocalChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('localStorageChanged', handleLocalChange);
+    };
+  }, []);
+
+  // Fetch user data from localStorage or use mock data - memoized to avoid recalc on every render
+  const userData = useMemo((): UserData => {
+    try {
+      const orgData = localStorage.getItem('zervos_organization');
+      if (orgData) {
+        try {
+          const org = JSON.parse(orgData);
+          if (org && typeof org === 'object') {
+            return {
+              name: org.businessName || 'John Doe',
+              email: org.email || 'john.doe@example.com',
+              timezone: org.timezone || 'America/New_York',
+              avatar: org.avatar || undefined,
+            };
+          }
+        } catch {}
+      }
+    } catch {}
+    return { name: 'John Doe', email: 'john.doe@example.com', timezone: 'America/New_York' };
+  }, []);
+
+  // Calculate actual counts from localStorage - memoized to avoid recalc on every render
+  const subscriptionData = useMemo((): SubscriptionData => {
+    // Get base subscription type and limits
+    let subscriptionType = 'Premium Trial';
+    let limits = { salespersons: 10, workspaces: 3, resources: 10 };
+    
+    try {
+      const subscriptionData = localStorage.getItem('zervos_subscription');
+      if (subscriptionData) {
+        try {
+          const parsed = JSON.parse(subscriptionData);
+          if (parsed && typeof parsed === 'object') {
+            subscriptionType = parsed.type || subscriptionType;
+            if (parsed.salespersons?.max) limits.salespersons = parsed.salespersons.max;
+            if (parsed.workspaces?.max) limits.workspaces = parsed.workspaces.max;
+            if (parsed.resources?.max) limits.resources = parsed.resources.max;
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // Count actual salespersons
+    let salespersonsCount = 0;
+    try {
+      const salespersonsData = localStorage.getItem('zervos_salespersons');
+      if (salespersonsData) {
+        const parsed = JSON.parse(salespersonsData);
+        if (Array.isArray(parsed)) {
+          salespersonsCount = parsed.length;
+        }
+      }
+    } catch {}
+
+    // Count actual workspaces
+    let workspacesCount = 0;
+    try {
+      const workspacesData = localStorage.getItem('workspaces');
+      if (workspacesData) {
+        const parsed = JSON.parse(workspacesData);
+        if (Array.isArray(parsed)) {
+          workspacesCount = parsed.length;
+        }
+      }
+    } catch {}
+
+    // Count actual resources (could be workspace-specific or global)
+    let resourcesCount = 0;
+    try {
+      // Try to get resources from all storage keys
+      const allKeys = Object.keys(localStorage);
+      const resourceKeys = allKeys.filter(key => key.startsWith('zervos_resources'));
+      
+      const resourceSet = new Set<string>();
+      resourceKeys.forEach(key => {
+        try {
+          const data = localStorage.getItem(key);
+          if (data) {
+            const parsed = JSON.parse(data);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(resource => {
+                if (resource.id) resourceSet.add(resource.id);
+              });
+            }
+          }
+        } catch {}
+      });
+      resourcesCount = resourceSet.size;
+    } catch {}
+
     return {
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      timezone: 'America/New_York'
+      type: subscriptionType as 'Free' | 'Premium Trial' | 'Enterprise',
+      salespersons: { current: salespersonsCount, max: limits.salespersons },
+      workspaces: { current: workspacesCount, max: limits.workspaces },
+      resources: { current: resourcesCount, max: limits.resources },
     };
-  };
-
-  // Mock subscription data (can be fetched from API)
-  const getSubscriptionData = (): SubscriptionData => {
-    const subscriptionData = localStorage.getItem('zervos_subscription');
-    if (subscriptionData) {
-      return JSON.parse(subscriptionData);
-    }
-    // Initialize default subscription data
-    const defaultData: SubscriptionData = {
-      type: 'Premium Trial',
-      salespersons: { current: 1, max: 10 },
-      workspaces: { current: 1, max: 3 },
-      resources: { current: 0, max: 10 }
-    };
-    localStorage.setItem('zervos_subscription', JSON.stringify(defaultData));
-    return defaultData;
-  };
-
-  const userData = getUserData();
-  const subscriptionData = getSubscriptionData();
+  }, [refreshKey]); // Re-calculate when data changes
 
   const handleSignOut = () => {
     // Clear all keys that belong to this app's localStorage namespace
@@ -148,7 +232,8 @@ export default function ProfileDropdown() {
   };
 
   const calculateProgress = (current: number, max: number) => {
-    return (current / max) * 100;
+    if (!max || max === 0) return 0;
+    return Math.min(100, (current / max) * 100);
   };
 
   return (
@@ -157,9 +242,9 @@ export default function ProfileDropdown() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-10 w-10 rounded-full">
             <Avatar className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all">
-              <AvatarImage src={userData.avatar} alt={userData.name} />
+              <AvatarImage src={userData?.avatar} alt={userData?.name || 'User'} />
               <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
-                {getInitials(userData.name)}
+                {getInitials(userData?.name || 'User')}
               </AvatarFallback>
             </Avatar>
           </Button>
@@ -169,17 +254,17 @@ export default function ProfileDropdown() {
           <div className="px-4 py-3">
             <div className="flex items-center gap-3">
               <Avatar className="h-12 w-12">
-                <AvatarImage src={userData.avatar} alt={userData.name} />
+                <AvatarImage src={userData?.avatar} alt={userData?.name || 'User'} />
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
-                  {getInitials(userData.name)}
+                  {getInitials(userData?.name || 'User')}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{userData.name}</p>
-                <p className="text-xs text-gray-500 truncate">{userData.email}</p>
+                <p className="text-sm font-semibold text-gray-900 truncate">{userData?.name || 'User'}</p>
+                <p className="text-xs text-gray-500 truncate">{userData?.email || 'user@example.com'}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <Globe size={12} className="text-gray-400" />
-                  <p className="text-xs text-gray-400">{userData.timezone}</p>
+                  <p className="text-xs text-gray-400">{userData?.timezone || 'UTC'}</p>
                 </div>
               </div>
             </div>
@@ -212,8 +297,8 @@ export default function ProfileDropdown() {
                 <CreditCard className="h-4 w-4 text-gray-600" />
                 <span className="text-sm font-semibold text-gray-900">Subscription</span>
               </div>
-              <Badge className={`${getSubscriptionColor(subscriptionData.type)} border`}>
-                {subscriptionData.type}
+              <Badge className={`${getSubscriptionColor(subscriptionData?.type || 'Premium Trial')} border`}>
+                {subscriptionData?.type || 'Premium Trial'}
               </Badge>
             </div>
             <Button
@@ -232,13 +317,13 @@ export default function ProfileDropdown() {
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-gray-600">Salespersons</span>
                   <span className="font-medium text-gray-900">
-                    {subscriptionData.salespersons.current}/{subscriptionData.salespersons.max}
+                    {subscriptionData?.salespersons?.current || 0}/{subscriptionData?.salespersons?.max || 10}
                   </span>
                 </div>
                 <Progress
                   value={calculateProgress(
-                    subscriptionData.salespersons.current,
-                    subscriptionData.salespersons.max
+                    subscriptionData?.salespersons?.current || 0,
+                    subscriptionData?.salespersons?.max || 10
                   )}
                   className="h-1.5"
                 />
@@ -248,13 +333,13 @@ export default function ProfileDropdown() {
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-gray-600">Workspaces</span>
                   <span className="font-medium text-gray-900">
-                    {subscriptionData.workspaces.current}/{subscriptionData.workspaces.max}
+                    {subscriptionData?.workspaces?.current || 0}/{subscriptionData?.workspaces?.max || 3}
                   </span>
                 </div>
                 <Progress
                   value={calculateProgress(
-                    subscriptionData.workspaces.current,
-                    subscriptionData.workspaces.max
+                    subscriptionData?.workspaces?.current || 0,
+                    subscriptionData?.workspaces?.max || 3
                   )}
                   className="h-1.5"
                 />
@@ -264,13 +349,13 @@ export default function ProfileDropdown() {
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="text-gray-600">Resources</span>
                   <span className="font-medium text-gray-900">
-                    {subscriptionData.resources.current}/{subscriptionData.resources.max}
+                    {subscriptionData?.resources?.current || 0}/{subscriptionData?.resources?.max || 10}
                   </span>
                 </div>
                 <Progress
                   value={calculateProgress(
-                    subscriptionData.resources.current,
-                    subscriptionData.resources.max
+                    subscriptionData?.resources?.current || 0,
+                    subscriptionData?.resources?.max || 10
                   )}
                   className="h-1.5"
                 />

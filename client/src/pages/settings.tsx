@@ -45,6 +45,8 @@ export default function TeamMembersPage() {
 
   const [isNewMemberOpen, setIsNewMemberOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [newMember, setNewMember] = useState({
     emails: '',
     role: 'Staff',
@@ -163,16 +165,152 @@ export default function TeamMembersPage() {
     }));
 
     const updatedMembers = [...teamMembers, ...newMembers];
-    setTeamMembers(updatedMembers);
-    
-    // Save to workspace-specific localStorage
-    localStorage.setItem(teamMembersStorageKey, JSON.stringify(updatedMembers));
+    persistTeamMembers(updatedMembers);
     
     setIsNewMemberOpen(false);
     setNewMember({
       emails: '',
       role: 'Staff',
     });
+  };
+
+  const persistTeamMembers = (items: TeamMember[]) => {
+    setTeamMembers(items);
+    if (teamMembersStorageKey) {
+      try {
+        localStorage.setItem(teamMembersStorageKey, JSON.stringify(items));
+        window.dispatchEvent(new CustomEvent('team-members-updated'));
+      } catch {}
+    }
+    // Sync with Admin Center unified store (zervos_salespersons)
+    try {
+      const adminRaw = localStorage.getItem('zervos_salespersons');
+      const adminList = adminRaw ? JSON.parse(adminRaw) : [];
+      const byIdOrEmail = new Map<string, any>();
+      for (const sp of adminList) {
+        const key = (sp.id || sp.email || '').toLowerCase();
+        if (key) byIdOrEmail.set(key, sp);
+      }
+
+      const roleToAdminRole = (r: string) => {
+        if (r === 'Admin' || r === 'Super Admin') return r;
+        return 'Staff';
+      };
+      const permsForRole = (role: string) => {
+        const isAdmin = role === 'Admin' || role === 'Super Admin';
+        const strong = (view=true) => ({ canView: view, canCreate: isAdmin, canEdit: isAdmin, canDelete: false });
+        return [
+          { module: 'Dashboard', ...strong(true) },
+          { module: 'Appointments', ...strong(true) },
+          { module: 'Customers', ...strong(true) },
+          { module: 'Services', ...strong(true) },
+          { module: 'Reports', ...strong(false) },
+          { module: 'Settings', ...strong(isAdmin) },
+          { module: 'Workflows', ...strong(isAdmin) },
+          { module: 'Team', ...strong(isAdmin) },
+          { module: 'Sales Calls', ...strong(true) },
+          { module: 'Availability', ...strong(true) },
+          { module: 'Booking Pages', ...strong(true) },
+        ];
+      };
+      const mergePermsForRole = (existing: any[] | undefined, role: string) => {
+        const tmpl = permsForRole(role);
+        const map = new Map<string, any>();
+        if (Array.isArray(existing)) for (const p of existing) map.set(p.module, { ...p });
+        for (const t of tmpl) {
+          const cur = map.get(t.module);
+          if (!cur) { map.set(t.module, { ...t }); continue; }
+          // Upgrade privileges to at least template for the role (e.g., Admin gets create/edit)
+          map.set(t.module, {
+            module: t.module,
+            canView: !!(cur.canView || t.canView),
+            canCreate: !!(cur.canCreate || t.canCreate),
+            canEdit: !!(cur.canEdit || t.canEdit),
+            canDelete: !!(cur.canDelete && t.canDelete),
+          });
+        }
+        return Array.from(map.values());
+      };
+
+      const merged: any[] = Array.isArray(adminList) ? [...adminList] : [];
+      for (const m of items) {
+        const key1 = (m.id || '').toLowerCase();
+        const key2 = (m.email || '').toLowerCase();
+        const existing = (key1 && byIdOrEmail.get(key1)) || (key2 && byIdOrEmail.get(key2));
+        const adminRole = roleToAdminRole(m.role);
+        const base = existing || {};
+        const updated = {
+          ...base,
+          id: m.id,
+          name: m.name,
+          email: m.email,
+          phone: m.phone || base.phone || '',
+          role: adminRole,
+          workspace: base.workspace || 'bharath',
+          status: base.status || 'Active',
+          availability: m.availability || base.availability || 'Full Time',
+          workload: base.workload || 'Low',
+          profilePicture: base.profilePicture,
+          permissions: mergePermsForRole(base.permissions, adminRole),
+          availabilitySchedule: base.availabilitySchedule,
+          timezone: base.timezone || 'Asia/Kolkata',
+          totalBookings: typeof base.totalBookings === 'number' ? base.totalBookings : 0,
+          averageRating: typeof base.averageRating === 'number' ? base.averageRating : 0,
+          bookingLink: base.bookingLink || `/book/team/${(m.name || 'member').toLowerCase().replace(/\s+/g,'-')}-${m.id}`,
+          teamViewLink: base.teamViewLink || `/team/public/${m.id}`,
+          notes: base.notes || '',
+        };
+        // Replace or add
+        const idx = merged.findIndex((sp) => sp.id === updated.id || sp.email === updated.email);
+        if (idx >= 0) merged[idx] = updated; else merged.push(updated);
+      }
+      localStorage.setItem('zervos_salespersons', JSON.stringify(merged));
+      window.dispatchEvent(new CustomEvent('team-members-updated'));
+    } catch {}
+  };
+
+  const handleOpenEdit = (member: TeamMember) => {
+    setEditingMember({ ...member });
+    setIsEditOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingMember) return;
+    const updated = teamMembers.map(m => m.id === editingMember.id ? editingMember : m);
+    persistTeamMembers(updated);
+    setIsEditOpen(false);
+    setEditingMember(null);
+  };
+
+  const handleRemoveMember = (member: TeamMember) => {
+    const updatedMembers = teamMembers.filter(m => m.id !== member.id);
+    persistTeamMembers(updatedMembers);
+    // Also unassign from sessions for this workspace
+    try {
+      if (sessionsStorageKey) {
+        const raw = localStorage.getItem(sessionsStorageKey);
+        const arr = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(arr)) {
+          const cleaned = arr.map((s: any) => ({
+            ...s,
+            assignedSalespersons: Array.isArray(s?.assignedSalespersons)
+              ? s.assignedSalespersons.filter((id: any) => id !== member.id && id !== member.email)
+              : s.assignedSalespersons
+          }));
+          localStorage.setItem(sessionsStorageKey, JSON.stringify(cleaned));
+          setSessions(cleaned);
+          window.dispatchEvent(new CustomEvent('sales-calls-updated', { detail: { workspaceId: selectedWorkspace?.id } }));
+        }
+      }
+    } catch {}
+    // Remove from Admin Center unified store as well
+    try {
+      const adminRaw = localStorage.getItem('zervos_salespersons');
+      const adminList = adminRaw ? JSON.parse(adminRaw) : [];
+      const cleaned = Array.isArray(adminList) ? adminList.filter((sp:any)=> sp.id !== member.id && sp.email !== member.email) : adminList;
+      localStorage.setItem('zervos_salespersons', JSON.stringify(cleaned));
+      window.dispatchEvent(new CustomEvent('team-members-updated'));
+    } catch {}
   };
 
   const teamMemberLabel = company?.teamMemberLabel || 'Team Members';
@@ -244,10 +382,10 @@ export default function TeamMembersPage() {
                       <DropdownMenuItem onClick={() => setSelectedMember(member)}>
                         View Profile
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleOpenEdit(member)}>
                         Edit Details
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600">
+                      <DropdownMenuItem className="text-red-600" onClick={() => handleRemoveMember(member)}>
                         Remove Member
                       </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -385,6 +523,53 @@ export default function TeamMembersPage() {
               </div>
               <DialogFooter>
                 <Button onClick={() => setSelectedMember(null)}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Edit Member Modal */}
+        {isEditOpen && editingMember && (
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit Details</DialogTitle>
+                <DialogDescription>Update team member information</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label>Name</Label>
+                  <Input value={editingMember.name} onChange={(e)=>setEditingMember({ ...editingMember, name: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Role</Label>
+                  <select
+                    value={editingMember.role}
+                    onChange={(e)=>setEditingMember({ ...editingMember, role: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="Staff">Staff</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Super Admin">Super Admin</option>
+                    <option value="Viewer">Viewer</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input value={editingMember.email} onChange={(e)=>setEditingMember({ ...editingMember, email: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Phone</Label>
+                  <Input value={editingMember.phone} onChange={(e)=>setEditingMember({ ...editingMember, phone: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Availability</Label>
+                  <Input value={editingMember.availability} onChange={(e)=>setEditingMember({ ...editingMember, availability: e.target.value })} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={()=>setIsEditOpen(false)}>Cancel</Button>
+                <Button onClick={handleSaveEdit}>Save Changes</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

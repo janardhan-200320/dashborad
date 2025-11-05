@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Search, Plus, Users, Edit, Trash2, Mail, Phone, Briefcase, Upload, Calendar, Award, Copy, Eye, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Permission {
   module: string;
@@ -43,6 +45,7 @@ interface Salesperson {
   totalBookings?: number;
   averageRating?: number;
   bookingLink?: string;
+  teamViewLink?: string;
   notes?: string;
 }
 
@@ -56,6 +59,10 @@ const DEFAULT_PERMISSIONS: Permission[] = [
   { module: 'Settings', canView: false, canCreate: false, canEdit: false, canDelete: false },
   { module: 'Workflows', canView: false, canCreate: false, canEdit: false, canDelete: false },
   { module: 'Team', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  // Team portal specific modules
+  { module: 'Sales Calls', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Availability', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  { module: 'Booking Pages', canView: true, canCreate: false, canEdit: false, canDelete: false },
 ];
 
 // Default weekly schedule
@@ -77,25 +84,177 @@ const generateBookingLink = (name: string, id: string): string => {
 
 export default function Salespersons() {
   const { toast } = useToast();
+  const { selectedWorkspace } = useWorkspace();
   // Dynamic labels from organization/company profile
   interface Company { teamMemberLabel?: string }
   const [company, setCompany] = useState<Company | null>(null);
   const [orgLabels, setOrgLabels] = useState<{ teamMemberLabel?: string } | null>(null);
+  // Helpers to normalize data across pages
+  const formatTime12h = (hhmm: string) => {
+    if (!hhmm || typeof hhmm !== 'string') return '';
+    const [hStr, mStr] = hhmm.split(':');
+    let h = Number(hStr);
+    const m = Number(mStr || 0);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return m === 0 ? `${h} ${ampm}` : `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  const scheduleToLabel = (schedule?: AvailabilitySchedule[]) => {
+    const daysOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const sch = (schedule && schedule.length) ? schedule : DEFAULT_SCHEDULE;
+    const enabledDays = sch.filter(d => d.enabled).map(d => d.day);
+    const allSameTimes = sch.filter(d => d.enabled).every(d => d.startTime === sch.find(s => s.enabled)?.startTime && d.endTime === sch.find(s => s.enabled)?.endTime);
+    const firstEnabled = sch.find(s => s.enabled);
+    const start = firstEnabled ? formatTime12h(firstEnabled.startTime) : '';
+    const end = firstEnabled ? formatTime12h(firstEnabled.endTime) : '';
+
+    // Daily same hours
+    if (enabledDays.length === 7 && allSameTimes) return `Daily, ${start} - ${end}`;
+    // Mon-Fri same hours
+    const monFri = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+    const satSun = ['Saturday','Sunday'];
+    const monFriEnabled = monFri.every(d => enabledDays.includes(d));
+    const satSunDisabled = satSun.every(d => !enabledDays.includes(d));
+    if (monFriEnabled && satSunDisabled && allSameTimes) return `Mon-Fri, ${start} - ${end}`;
+
+    // Single day same hours
+    if (enabledDays.length === 1) return `${enabledDays[0]}, ${start} - ${end}`;
+
+    // Generic fallback
+    return 'Custom';
+  };
+  const normalizeFromTeamMembers = (items: any[]): Salesperson[] => {
+    // Map simpler sidebar team member shape to the richer admin salesperson shape
+    return (items || []).map((m) => {
+      const id = m.id || `${Date.now()}-${Math.random()}`;
+      // Map roles: sidebar uses Salesperson/Admin/Super Admin/Viewer -> map Salesperson -> Staff
+      let role: Salesperson['role'] = 'Staff';
+      if (m.role === 'Admin' || m.role === 'Super Admin' || m.role === 'Manager') role = m.role;
+      // Default workspace if absent
+      const workspace = m.workspace || 'bharath';
+      return {
+        id,
+        name: m.name || '',
+        email: m.email || '',
+        phone: m.phone || '',
+        role,
+        workspace,
+        status: (m.status as Salesperson['status']) || 'Active',
+        availability: m.availability || 'Full Time',
+        workload: m.workload || 'Low',
+        profilePicture: m.profilePicture || undefined,
+        permissions: [...DEFAULT_PERMISSIONS],
+        availabilitySchedule: [...DEFAULT_SCHEDULE],
+        timezone: m.timezone || 'Asia/Kolkata',
+        totalBookings: m.appointmentsCount || 0,
+        averageRating: typeof m.averageRating === 'number' ? m.averageRating : 0,
+        bookingLink: m.bookingLink || generateBookingLink(m.name || 'member', id),
+        notes: m.notes || '',
+      } as Salesperson;
+    });
+  };
+
+  const toTeamMembersFormat = (items: Salesperson[]) => {
+    // Convert rich admin salesperson shape back to sidebar list shape
+    const colors = [
+      'from-purple-500 to-pink-500',
+      'from-blue-500 to-cyan-500',
+      'from-green-500 to-emerald-500',
+      'from-orange-500 to-red-500',
+      'from-indigo-500 to-purple-500',
+      'from-yellow-500 to-orange-500',
+    ];
+    const pickColor = () => colors[Math.floor(Math.random() * colors.length)];
+    return (items || []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      email: p.email,
+      role: p.role === 'Staff' ? 'Salesperson' : p.role,
+      color: (p as any).color || pickColor(),
+      phone: p.phone || '',
+      appointmentsCount: p.totalBookings || 0,
+      availability: p.availability || scheduleToLabel(p.availabilitySchedule),
+      workspace: p.workspace || 'bharath',
+      status: p.status || 'Active',
+      bookingLink: p.bookingLink,
+      notes: p.notes || ''
+    }));
+  };
+
+  // Compute assigned bookings count for each member from sales calls of current workspace
+  const applyAssignedCounts = (people: Salesperson[]): Salesperson[] => {
+    try {
+      if (!selectedWorkspace) return people;
+      const callsRaw = localStorage.getItem(`zervos_sales_calls::${selectedWorkspace.id}`);
+      const calls = callsRaw ? JSON.parse(callsRaw) : [];
+      return people.map(p => {
+        const count = Array.isArray(calls)
+          ? calls.filter((c: any) => Array.isArray(c?.assignedSalespersons) && c.assignedSalespersons.includes(p.id)).length
+          : 0;
+        return { ...p, totalBookings: count };
+      });
+    } catch {
+      return people;
+    }
+  };
+
+  // Helper to (re)load and merge from both storages
+  const reloadSalespersons = () => {
+    try {
+      const workspaceKey = selectedWorkspace ? `zervos_team_members::${selectedWorkspace.id}` : null;
+      const sidebarRaw = workspaceKey ? (localStorage.getItem(workspaceKey) || localStorage.getItem('zervos_team_members')) : localStorage.getItem('zervos_team_members');
+      const adminRaw = localStorage.getItem('zervos_salespersons');
+      const sidebarList = sidebarRaw ? normalizeFromTeamMembers(JSON.parse(sidebarRaw)) : [];
+      const adminList: Salesperson[] = adminRaw ? JSON.parse(adminRaw) : [];
+      const byEmail = new Map<string, Salesperson>();
+      for (const p of sidebarList) if (p.email) byEmail.set(p.email.toLowerCase(), p);
+      for (const p of adminList) if (p.email) byEmail.set(p.email.toLowerCase(), { ...byEmail.get(p.email.toLowerCase()), ...p });
+      let merged = Array.from(byEmail.values());
+      // Apply assigned counts from current workspace sales calls
+      merged = applyAssignedCounts(merged);
+      if (merged.length > 0) {
+        setSalespersons(merged);
+      } else if (adminList.length > 0) {
+        setSalespersons(applyAssignedCounts(adminList));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
+    // Load company/org label sources
     const savedCompany = localStorage.getItem('zervos_company');
     if (savedCompany) setCompany(JSON.parse(savedCompany));
 
-    // Fallback: also check organization settings for labels if present
     const orgSettingsRaw = localStorage.getItem('zervos_organization_settings');
     if (orgSettingsRaw) {
       try {
         const orgSettings = JSON.parse(orgSettingsRaw);
-        // Support both flat and nested labels shapes
         const tm = orgSettings?.labels?.teamMemberLabel || orgSettings?.teamMemberLabel;
         if (tm) setOrgLabels({ teamMemberLabel: tm });
       } catch {}
     }
-  }, []);
+
+  reloadSalespersons();
+
+    // Listen for updates from other pages
+  const onUpdated = () => reloadSalespersons();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'zervos_team_members' || e.key === 'zervos_salespersons' || (selectedWorkspace && e.key === `zervos_team_members::${selectedWorkspace.id}`) || (selectedWorkspace && e.key === `zervos_sales_calls::${selectedWorkspace.id}`)) reloadSalespersons();
+    };
+    window.addEventListener('team-members-updated', onUpdated as EventListener);
+    window.addEventListener('sales-calls-updated', onUpdated as EventListener);
+    window.addEventListener('storage', onStorage);
+
+    const t = setTimeout(() => setLoading(false), 300);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('team-members-updated', onUpdated as EventListener);
+      window.removeEventListener('sales-calls-updated', onUpdated as EventListener);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [selectedWorkspace?.id]);
   const teamMemberLabel = orgLabels?.teamMemberLabel || company?.teamMemberLabel || 'Salespersons';
   const teamMemberLabelSingular = teamMemberLabel.endsWith('s') ? teamMemberLabel.slice(0, -1) : teamMemberLabel;
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,6 +263,10 @@ export default function Salespersons() {
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Salesperson | null>(null);
   const [viewingPerson, setViewingPerson] = useState<Salesperson | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [viewingAppointments, setViewingAppointments] = useState<Array<{ id: string; customerName: string; date: string; time: string; serviceName: string; status: 'upcoming' | 'completed' | 'cancelled'; }>>([]);
+  const [assignedCalls, setAssignedCalls] = useState<Array<{ id: string; name: string }>>([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   
   const [salespersons, setSalespersons] = useState<Salesperson[]>([
     {
@@ -137,16 +300,21 @@ export default function Salespersons() {
     notes: '',
   });
 
-  useEffect(() => {
-    const saved = localStorage.getItem('zervos_salespersons');
-    if (saved) {
-      setSalespersons(JSON.parse(saved));
-    }
-  }, []);
-
   const saveToLocalStorage = (data: Salesperson[]) => {
-    localStorage.setItem('zervos_salespersons', JSON.stringify(data));
+    // Persist to both admin and sidebar storages to keep pages in sync
+    try {
+      localStorage.setItem('zervos_salespersons', JSON.stringify(data));
+      const sidebarShape = toTeamMembersFormat(data);
+      localStorage.setItem('zervos_team_members', JSON.stringify(sidebarShape));
+      // Also persist to workspace-specific key if applicable
+      if (selectedWorkspace) {
+        localStorage.setItem(`zervos_team_members::${selectedWorkspace.id}`, JSON.stringify(sidebarShape));
+      }
+    } catch {}
     setSalespersons(data);
+    // Notify other views to refresh
+    window.dispatchEvent(new CustomEvent('team-members-updated'));
+    window.dispatchEvent(new Event('localStorageChanged'));
   };
 
   const handleAddPerson = () => {
@@ -154,7 +322,9 @@ export default function Salespersons() {
     const person: Salesperson = {
       id,
       ...newPerson,
+      availability: scheduleToLabel(newPerson.availabilitySchedule),
       bookingLink: generateBookingLink(newPerson.name, id),
+      teamViewLink: `/team/public/${id}`,
     };
     const updated = [...salespersons, person];
     saveToLocalStorage(updated);
@@ -184,7 +354,13 @@ export default function Salespersons() {
 
   const handleEditPerson = () => {
     if (!editingPerson) return;
-    const updated = salespersons.map(p => p.id === editingPerson.id ? editingPerson : p);
+    // Ensure human-readable availability label stays in sync with schedule
+    const normalized = { 
+      ...editingPerson, 
+      availability: scheduleToLabel(editingPerson.availabilitySchedule),
+      teamViewLink: editingPerson.teamViewLink || `/team/public/${editingPerson.id}`,
+    } as Salesperson;
+    const updated = salespersons.map(p => p.id === normalized.id ? normalized : p);
     saveToLocalStorage(updated);
     setEditModalOpen(false);
     setEditingPerson(null);
@@ -250,9 +426,45 @@ export default function Salespersons() {
     sp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     sp.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Load details (appointments + assigned calls) when opening view modal
+  useEffect(() => {
+    const loadDetails = async () => {
+      if (!viewDetailsOpen || !viewingPerson) return;
+      setDetailsLoading(true);
+      try {
+        // Fetch appointments assigned to this member from backend
+        const res = await fetch(`/api/appointments?assignedMemberId=${encodeURIComponent(viewingPerson.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            setViewingAppointments(data);
+          }
+        }
+      } catch {}
+
+      try {
+        // Get assigned calls from workspace-scoped sales calls
+        const workspaceKey = selectedWorkspace ? `zervos_sales_calls::${selectedWorkspace.id}` : 'zervos_sales_calls';
+        const raw = localStorage.getItem(workspaceKey) || localStorage.getItem('zervos_sales_calls');
+        const calls = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(calls)) {
+          const mine = calls.filter((c: any) => Array.isArray(c?.assignedSalespersons) && c.assignedSalespersons.includes(viewingPerson.id))
+                           .map((c: any) => ({ id: c.id, name: c.name }));
+          setAssignedCalls(mine);
+        } else {
+          setAssignedCalls([]);
+        }
+      } catch {
+        setAssignedCalls([]);
+      }
+      setDetailsLoading(false);
+    };
+    loadDetails();
+  }, [viewDetailsOpen, viewingPerson, selectedWorkspace?.id]);
   
   return (
-    <div className="p-8 max-w-7xl">
+    <div className="p-8 w-full">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-gray-900">{teamMemberLabel}</h1>
@@ -282,8 +494,8 @@ export default function Salespersons() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+        <table className="w-full min-w-[1200px]">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -310,7 +522,47 @@ export default function Salespersons() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredSalespersons.map((person) => (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skeleton-${i}`}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-56" />
+                      <Skeleton className="h-4 w-40" />
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton className="h-6 w-24 rounded-full" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton className="h-6 w-24 rounded-full" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton className="h-4 w-24" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <Skeleton className="h-4 w-16" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-8 w-8 rounded-md" />
+                      <Skeleton className="h-8 w-8 rounded-md" />
+                      <Skeleton className="h-8 w-8 rounded-md" />
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+            filteredSalespersons.map((person) => (
               <tr key={person.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center gap-3">
@@ -420,6 +672,14 @@ export default function Salespersons() {
                     <Button 
                       variant="ghost" 
                       size="sm"
+                      title="Copy Team View Link"
+                      onClick={() => handleCopyBookingLink(person.teamViewLink || `/team/public/${person.id}`)}
+                    >
+                      <Copy size={16} />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
                       title="Delete"
                       onClick={() => handleDeletePerson(person.id)}
                     >
@@ -428,21 +688,22 @@ export default function Salespersons() {
                   </div>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
         
         {filteredSalespersons.length === 0 && (
           <div className="text-center py-12">
             <Users size={48} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="font-semibold text-gray-900 mb-1">No salespersons found</h3>
+            <h3 className="font-semibold text-gray-900 mb-1">No {teamMemberLabel.toLowerCase()} found</h3>
             <p className="text-sm text-gray-500 mb-4">
               {searchQuery ? 'Try adjusting your search' : 'Add your first team member to get started'}
             </p>
             {!searchQuery && (
               <Button onClick={() => setAddModalOpen(true)} className="gap-2">
                 <Plus size={16} />
-                Add Salesperson
+                {`Add ${teamMemberLabelSingular}`}
               </Button>
             )}
           </div>
@@ -453,8 +714,8 @@ export default function Salespersons() {
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add New Team Member</DialogTitle>
-            <DialogDescription>Add a new team member with permissions and availability</DialogDescription>
+            <DialogTitle>{`Add New ${teamMemberLabelSingular}`}</DialogTitle>
+            <DialogDescription>{`Add a new ${teamMemberLabelSingular.toLowerCase()} with permissions and availability`}</DialogDescription>
           </DialogHeader>
           
           <Tabs defaultValue="basic" className="w-full">
@@ -683,7 +944,7 @@ export default function Salespersons() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddModalOpen(false)}>Cancel</Button>
             <Button onClick={handleAddPerson} disabled={!newPerson.name || !newPerson.email}>
-              Add Team Member
+              {`Add ${teamMemberLabelSingular}`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -693,8 +954,8 @@ export default function Salespersons() {
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Team Member</DialogTitle>
-            <DialogDescription>Update team member information, permissions, and availability</DialogDescription>
+            <DialogTitle>{`Edit ${teamMemberLabelSingular}`}</DialogTitle>
+            <DialogDescription>{`Update ${teamMemberLabelSingular.toLowerCase()} information, permissions, and availability`}</DialogDescription>
           </DialogHeader>
           {editingPerson && (
             <>
@@ -941,8 +1202,11 @@ export default function Salespersons() {
         <Dialog open={viewDetailsOpen} onOpenChange={setViewDetailsOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Team Member Details</DialogTitle>
+              <DialogTitle>{`${teamMemberLabelSingular} Details`}</DialogTitle>
             </DialogHeader>
+            {detailsLoading && (
+              <div className="p-3 text-sm text-gray-500">Loading assignments…</div>
+            )}
             <div className="space-y-6">
               <div className="flex items-center gap-4">
                 {viewingPerson.profilePicture ? (
@@ -962,8 +1226,8 @@ export default function Salespersons() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="border rounded-lg p-4 text-center">
                   <Calendar className="mx-auto mb-2 text-blue-600" size={24} />
-                  <p className="text-2xl font-bold">{viewingPerson.totalBookings || 0}</p>
-                  <p className="text-sm text-gray-600">Total Bookings</p>
+                  <p className="text-2xl font-bold">{viewingAppointments.length}</p>
+                  <p className="text-sm text-gray-600">Appointments</p>
                 </div>
                 <div className="border rounded-lg p-4 text-center">
                   <Award className="mx-auto mb-2 text-yellow-600" size={24} />
@@ -972,9 +1236,49 @@ export default function Salespersons() {
                 </div>
                 <div className="border rounded-lg p-4 text-center">
                   <Users className="mx-auto mb-2 text-green-600" size={24} />
-                  <p className="text-2xl font-bold">{viewingPerson.status}</p>
-                  <p className="text-sm text-gray-600">Status</p>
+                  <p className="text-2xl font-bold">{assignedCalls.length}</p>
+                  <p className="text-sm text-gray-600">Assigned Calls</p>
                 </div>
+              </div>
+
+              {/* Assigned Calls List */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Assigned Calls</Label>
+                {assignedCalls.length === 0 ? (
+                  <p className="text-sm text-gray-500">No calls assigned</p>
+                ) : (
+                  <ul className="text-sm text-gray-800 list-disc pl-5 space-y-1">
+                    {assignedCalls.slice(0, 6).map(c => (
+                      <li key={c.id}>{c.name}</li>
+                    ))}
+                    {assignedCalls.length > 6 && (
+                      <li className="text-gray-500">+{assignedCalls.length - 6} more…</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+
+              {/* Appointments List */}
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Appointments</Label>
+                {viewingAppointments.length === 0 ? (
+                  <p className="text-sm text-gray-500">No appointments found</p>
+                ) : (
+                  <div className="space-y-2">
+                    {viewingAppointments.slice(0, 8).map(a => (
+                      <div key={a.id} className="flex items-center justify-between border rounded-md p-2 text-sm">
+                        <div>
+                          <div className="font-medium">{a.customerName}</div>
+                          <div className="text-gray-500">{a.date} • {a.time}</div>
+                        </div>
+                        <div className="text-gray-600">{a.serviceName}</div>
+                      </div>
+                    ))}
+                    {viewingAppointments.length > 8 && (
+                      <div className="text-xs text-gray-500">+{viewingAppointments.length - 8} more…</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {viewingPerson.bookingLink && (
@@ -990,6 +1294,19 @@ export default function Salespersons() {
                   </div>
                 </div>
               )}
+
+              {/* Public Team View Link */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <Label className="text-sm font-medium mb-2 block">Team View Link</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-white px-3 py-2 rounded border text-sm">
+                    {window.location.origin}/team/public/{viewingPerson.id}
+                  </code>
+                  <Button size="sm" onClick={() => handleCopyBookingLink(`/team/public/${viewingPerson.id}`)}>
+                    <Copy size={14} />
+                  </Button>
+                </div>
+              </div>
 
               {viewingPerson.notes && (
                 <div>

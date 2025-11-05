@@ -1,35 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '@/components/DashboardLayout';
 import DashboardOverview from '@/components/DashboardOverview';
+import AnimatedButton from '@/components/AnimatedButton';
+import EmptyState from '@/components/EmptyState';
+import { CardSkeleton } from '@/components/LoadingStates';
 import { 
   Calendar as CalendarIcon, 
   Users, 
   Clock, 
   Search,
   Download,
-  Eye,
-  Edit2,
   Video,
-  MessageSquare,
   Share2,
-  Info,
-  Plus,
-  Copy,
-  Star,
   TrendingUp,
-  Filter,
-  Globe,
-  Bell,
-  Lock,
-  CreditCard,
-  Palette,
-  Image as ImageIcon,
-  Shield,
-  CheckCircle,
   DollarSign,
-  Zap,
-  Activity,
-  Award,
+  Eye,
 } from 'lucide-react';
 
 type Tab = 'bookings' | 'sessions' | 'responses' | 'settings' | 'overview';
@@ -37,6 +23,8 @@ type BookingFilter = 'upcoming' | 'important' | 'recurring' | 'completed' | 'can
 
 const DashboardMain = () => {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [isLoading, setIsLoading] = useState(false);
+  const hasMountedRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<BookingFilter>('completed');
   const [notifications, setNotifications] = useState({
@@ -48,6 +36,17 @@ const DashboardMain = () => {
     smsCancellations: false,
   });
   const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+
+    setIsLoading(true);
+    const timer = window.setTimeout(() => setIsLoading(false), 420);
+    return () => window.clearTimeout(timer);
+  }, [activeTab]);
 
   // Completed bookings data
   const completedBookings = [
@@ -90,221 +89,247 @@ const DashboardMain = () => {
   };
 
   const renderBookings = () => (
-    <>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
       {/* Search and Export Section */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+      <div className="mb-6 flex flex-col gap-4 md:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
             placeholder="Search by Product Title"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-2xl border border-white/20 bg-white/80 px-11 py-3 text-sm text-slate-600 shadow-[0_20px_45px_-28px_rgba(15,23,42,0.3)] transition focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
           />
         </div>
-        <button className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700">
-          <Download size={18} />
-          Export
-        </button>
+        <AnimatedButton
+          variant="outline"
+          size="md"
+          className="justify-center border-white/20 bg-white/70 text-slate-700 hover:text-slate-900"
+        >
+          <Download size={16} />
+          Export report
+        </AnimatedButton>
       </div>
 
       {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Content - Left Side (2 columns) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Filter Pills */}
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setActiveFilter('upcoming')}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
-                activeFilter === 'upcoming'
-                  ? 'bg-black text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Upcoming ({filterCounts.upcoming})
-            </button>
-            <button
-              onClick={() => setActiveFilter('important')}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
-                activeFilter === 'important'
-                  ? 'bg-black text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Important ({filterCounts.important})
-            </button>
-            <button
-              onClick={() => setActiveFilter('recurring')}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
-                activeFilter === 'recurring'
-                  ? 'bg-black text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Recurring ({filterCounts.recurring})
-            </button>
-            <button
-              onClick={() => setActiveFilter('completed')}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
-                activeFilter === 'completed'
-                  ? 'bg-black text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Completed ({filterCounts.completed})
-            </button>
-            <button
-              onClick={() => setActiveFilter('cancelled')}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
-                activeFilter === 'cancelled'
-                  ? 'bg-black text-white'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Cancelled ({filterCounts.cancelled})
-            </button>
-          </div>
+          <motion.div 
+            className="flex flex-wrap gap-3"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          >
+            {(['upcoming', 'important', 'recurring', 'completed', 'cancelled'] as BookingFilter[]).map((filter, index) => (
+              <motion.button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2, delay: index * 0.05 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`rounded-full px-5 py-2.5 text-sm font-medium transition-all duration-300 ${
+                  activeFilter === filter
+                    ? 'bg-gradient-to-r from-brand-500 to-purple-600 text-white shadow-lg shadow-brand-500/30'
+                    : 'border border-white/30 bg-white/80 text-slate-600 hover:border-brand-200 hover:text-slate-900'
+                }`}
+              >
+                {filter.charAt(0).toUpperCase() + filter.slice(1)} ({filterCounts[filter]})
+              </motion.button>
+            ))}
+          </motion.div>
 
           {/* Bookings List or Empty State */}
-          {activeFilter === 'completed' && completedBookings.length > 0 ? (
-            <div className="space-y-4">
-              {completedBookings.map((booking) => (
-                <div key={booking.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                        <span className="font-medium">{booking.date}</span>
-                        <span>•</span>
-                        <Clock size={16} />
-                        <span>{booking.time}</span>
+          <AnimatePresence mode="wait">
+            {activeFilter === 'completed' && completedBookings.length > 0 ? (
+              <motion.div 
+                className="space-y-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {completedBookings.map((booking, index) => (
+                  <motion.div
+                    key={booking.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    whileHover={{ scale: 1.01, y: -2 }}
+                    className="rounded-3xl border border-white/20 bg-white/80 p-6 shadow-[0_16px_40px_-25px_rgba(79,70,229,0.55)] transition-all duration-500 hover:-translate-y-1 hover:border-brand-200/80 hover:shadow-[0_20px_60px_-25px_rgba(99,102,241,0.55)]"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                          <span className="font-medium">{booking.date}</span>
+                          <Clock size={16} />
+                          <span>{booking.time}</span>
+                        </div>
+                        <h3 className="mb-2 text-lg font-semibold text-slate-900">
+                          Booking with {booking.name} ({booking.duration})
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                          <Video size={16} className="text-emerald-500" />
+                          <span className="font-medium text-slate-900">{booking.platform}</span>
+                          <span>|</span>
+                          <span>{booking.service}</span>
+                        </div>
                       </div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        Booking with {booking.name} ({booking.duration})
-                      </h3>
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Video size={16} className="text-green-600" />
-                        <span className="font-medium">{booking.platform}</span>
-                        <span>|</span>
-                        <span>{booking.service}</span>
-                      </div>
+                      <AnimatedButton
+                        variant="ghost"
+                        size="sm"
+                        className="text-slate-600"
+                      >
+                        Manage booking
+                      </AnimatedButton>
                     </div>
-                    <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-                      Edit
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-gray-400">
-                        <path d="M4 8L8 12L12 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
+                  </motion.div>
+                ))}
+              </motion.div>
+            ) : (
             /* Empty State */
-            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-              <div className="flex justify-center mb-6">
-                <svg width="120" height="120" viewBox="0 0 120 120" fill="none" className="text-gray-300">
-                  <circle cx="60" cy="50" r="30" fill="currentColor" opacity="0.2"/>
-                  <path d="M45 45C45 45 50 40 60 40C70 40 75 45 75 45" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-                  <circle cx="52" cy="52" r="2" fill="currentColor"/>
-                  <circle cx="68" cy="52" r="2" fill="currentColor"/>
-                  <path d="M40 75L45 80L50 75L55 80L60 75L65 80L70 75L75 80L80 75" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No upcoming bookings</h3>
-              <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                Your schedule looks empty. Share sessions<br />across your socials to get bookings.
-              </p>
-              <div className="flex items-center justify-center gap-4">
-                <button className="flex items-center gap-2 px-6 py-2.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700">
-                  <MessageSquare size={18} />
-                  Learn More
-                </button>
-                <button className="flex items-center gap-2 px-6 py-2.5 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors font-medium text-gray-700">
-                  <Share2 size={18} />
-                  Share Now
-                </button>
-              </div>
-            </div>
+            <EmptyState
+              icon={CalendarIcon}
+              title="No upcoming bookings"
+              description="Your schedule is clear. Launch a campaign or share your booking link to fill the calendar with high-intent leads."
+              action={{
+                label: 'Create booking page',
+                onClick: () => window.dispatchEvent(new CustomEvent('open-create-booking')),
+              }}
+              secondaryAction={{
+                label: 'Share availability',
+                onClick: () => window.dispatchEvent(new CustomEvent('share-booking')), 
+              }}
+            />
           )}
+          </AnimatePresence>
         </div>
 
         {/* Right Sidebar - Stats */}
-        <div className="space-y-6">
+        <motion.div 
+          className="space-y-6"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
           {/* Profile Link Card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-lg">Z</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-600 truncate">superprofile.bio/bookings/pr...</p>
-              </div>
-              <div className="flex gap-2">
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Eye size={18} className="text-gray-600" />
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Edit2 size={18} className="text-gray-600" />
-                </button>
+          <motion.div 
+            whileHover={{ scale: 1.02, y: -2 }}
+            className="rounded-3xl border border-white/20 bg-white/80 p-5 shadow-lg shadow-slate-900/10 backdrop-blur"
+          >
+            <div className="flex items-start gap-3">
+              <motion.div 
+                whileHover={{ rotate: 4 }}
+                className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-purple-500 text-white shadow-xl"
+              >
+                Z
+              </motion.div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">Primary link</p>
+                <p className="mt-1 truncate text-sm font-semibold text-slate-900">superprofile.bio/bookings/pro-plan</p>
+                <p className="mt-2 text-xs text-slate-500">Share this across your funnels to keep conversions flowing.</p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <AnimatedButton
+                    size="sm"
+                    variant="secondary"
+                    className="bg-white/80 text-slate-800 hover:bg-white"
+                    onClick={() => window.open('https://superprofile.bio/bookings/pro-plan', '_blank')}
+                  >
+                    Preview page
+                  </AnimatedButton>
+                  <AnimatedButton
+                    size="sm"
+                    variant="outline"
+                    className="border-white/40 text-slate-700 hover:border-brand-300"
+                    onClick={() => navigator.clipboard.writeText('https://superprofile.bio/bookings/pro-plan').catch(() => {})}
+                  >
+                    Copy link
+                  </AnimatedButton>
+                </div>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-gray-600">Total Bookings</span>
-                <Info size={14} className="text-gray-400" />
-              </div>
-              <p className="text-3xl font-bold text-gray-900">8</p>
-            </div>
-            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-gray-600">Amount Earned</span>
-                <Info size={14} className="text-gray-400" />
-              </div>
-              <p className="text-3xl font-bold text-gray-900">₹3000</p>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-gray-600">Total views</span>
-                <Info size={14} className="text-gray-400" />
-              </div>
-              <p className="text-3xl font-bold text-gray-900">169</p>
-            </div>
-            <div className="bg-pink-50 rounded-lg p-4 border border-pink-200">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-gray-600">Conversions</span>
-                <Info size={14} className="text-gray-400" />
-              </div>
-              <p className="text-3xl font-bold text-gray-900">4.1%</p>
-            </div>
-          </div>
+          <motion.div 
+            className="grid grid-cols-2 gap-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+          >
+            {[
+              { label: 'Total Bookings', value: '8', bg: 'from-blue-50 to-blue-100', border: 'border-blue-200', icon: CalendarIcon, color: 'text-blue-600' },
+              { label: 'Amount Earned', value: '₹3000', bg: 'from-orange-50 to-orange-100', border: 'border-orange-200', icon: DollarSign, color: 'text-orange-600' },
+              { label: 'Total views', value: '169', bg: 'from-purple-50 to-purple-100', border: 'border-purple-200', icon: Eye, color: 'text-purple-600' },
+              { label: 'Conversions', value: '4.1%', bg: 'from-pink-50 to-pink-100', border: 'border-pink-200', icon: TrendingUp, color: 'text-pink-600' },
+            ].map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3, delay: 0.3 + index * 0.1 }}
+                whileHover={{ scale: 1.05, y: -4 }}
+                className={`cursor-pointer rounded-3xl border ${stat.border} bg-gradient-to-br ${stat.bg} p-4 shadow-lg shadow-slate-900/10 transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <stat.icon size={16} className={stat.color} />
+                  <span className="text-xs text-gray-600 font-medium">{stat.label}</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+              </motion.div>
+            ))}
+          </motion.div>
 
           {/* Share Card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex gap-4 mb-4">
-              <div className="w-16 h-20 bg-gray-200 rounded-lg flex items-center justify-center">
-                <Users size={24} className="text-gray-400" />
-              </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+            whileHover={{ scale: 1.02, y: -2 }}
+            className="rounded-3xl border border-white/20 bg-gradient-to-br from-white/85 via-white/70 to-brand-50/80 p-6 shadow-lg backdrop-blur"
+          >
+            <div className="mb-4 flex gap-4">
+              <motion.div 
+                whileHover={{ rotate: 5, scale: 1.1 }}
+                className="flex h-20 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-100 to-brand-100 text-brand-600 shadow-lg"
+              >
+                <Users size={24} />
+              </motion.div>
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Share your booking page</h3>
-                <p className="text-sm text-gray-600">View the different ways you can share this.</p>
+                <h3 className="mb-1 text-lg font-semibold text-slate-900">Share your booking page</h3>
+                <p className="text-sm text-slate-600">Amplify reach across socials, newsletters and automations.</p>
               </div>
             </div>
-            <button className="w-full bg-black text-white py-2.5 px-4 rounded-lg hover:bg-gray-800 transition-colors font-medium">
-              Share
-            </button>
-          </div>
-        </div>
+            <AnimatedButton className="w-full justify-center">
+              Share now
+            </AnimatedButton>
+          </motion.div>
+        </motion.div>
       </div>
-    </>
+    </motion.div>
   );
 
   const renderContent = () => {
+    if (isLoading) {
+      return (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="grid grid-cols-1 gap-4 md:grid-cols-2"
+        >
+          <CardSkeleton count={4} />
+        </motion.div>
+      );
+    }
+
     switch (activeTab) {
       case 'overview':
         return <DashboardOverview />;
@@ -323,63 +348,64 @@ const DashboardMain = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-4 lg:p-6">
-        {/* Header Tabs */}
-        <div className="flex space-x-6 border-b border-gray-200 mb-6">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`pb-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'overview'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+      <div className="space-y-8">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex items-center justify-between rounded-3xl border border-white/20 bg-white/10 px-4 py-2 shadow-inner backdrop-blur-xl sm:px-6"
+        >
+          <div className="flex items-center gap-3 overflow-x-auto">
+            {[
+              { key: 'overview', label: 'Overview' },
+              { key: 'bookings', label: 'Bookings' },
+              { key: 'sessions', label: 'Sessions' },
+              { key: 'responses', label: 'Responses' },
+              { key: 'settings', label: 'Settings' },
+            ].map((tab) => (
+              <motion.button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as Tab)}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.96 }}
+                className={`relative rounded-full px-4 py-2 text-sm font-medium transition ${
+                  activeTab === tab.key
+                    ? 'text-white'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <span className="relative z-10">{tab.label}</span>
+                {activeTab === tab.key && (
+                  <motion.span
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 rounded-full bg-gradient-to-r from-brand-500 to-purple-600 shadow-lg"
+                    transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+                  />
+                )}
+              </motion.button>
+            ))}
+          </div>
+          <AnimatedButton
+            size="sm"
+            variant="ghost"
+            className="text-slate-200"
+            onClick={() => window.dispatchEvent(new CustomEvent('share-booking'))}
           >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('bookings')}
-            className={`pb-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'bookings'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Bookings
-          </button>
-          <button
-            onClick={() => setActiveTab('sessions')}
-            className={`pb-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'sessions'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Sessions
-          </button>
-          <button
-            onClick={() => setActiveTab('responses')}
-            className={`pb-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'responses'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Responses
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`pb-3 text-sm font-medium transition-colors relative ${
-              activeTab === 'settings'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Settings
-          </button>
-        </div>
+            <Share2 size={16} /> Share page
+          </AnimatedButton>
+        </motion.div>
 
-        {/* Tab Content */}
-        {renderContent()}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab + (isLoading ? '-loading' : '-ready')}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.35 }}
+          >
+            {renderContent()}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </DashboardLayout>
   );

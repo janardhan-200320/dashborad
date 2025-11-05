@@ -11,6 +11,20 @@ export default {
         sm: ".1875rem", /* 3px */
       },
       colors: {
+        // Dynamic brand color from CSS variable
+        brand: {
+          DEFAULT: "var(--brand-color, #6366f1)",
+          50: "var(--brand-50, #eef2ff)",
+          100: "var(--brand-100, #e0e7ff)",
+          200: "var(--brand-200, #c7d2fe)",
+          300: "var(--brand-300, #a5b4fc)",
+          400: "var(--brand-400, #818cf8)",
+          500: "var(--brand-500, #6366f1)",
+          600: "var(--brand-600, #4f46e5)",
+          700: "var(--brand-700, #4338ca)",
+          800: "var(--brand-800, #3730a3)",
+          900: "var(--brand-900, #312e81)",
+        },
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
@@ -83,9 +97,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)"],
-        serif: ["var(--font-serif)"],
-        mono: ["var(--font-mono)"],
+        sans: ["Inter", "system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        display: ["Satoshi", "Inter", "sans-serif"],
+        mono: ["JetBrains Mono", "Fira Code", "monospace"],
       },
       keyframes: {
         "accordion-down": {

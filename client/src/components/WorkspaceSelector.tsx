@@ -50,16 +50,16 @@ export default function WorkspaceSelector({ sidebarOpen }: WorkspaceSelectorProp
     <div className="px-3 py-2">
       <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
         <DropdownMenuTrigger asChild>
-          <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className={`w-10 h-10 ${displayColor} rounded-lg flex items-center justify-center flex-shrink-0`}>
-                <span className="text-sm font-bold text-gray-900">{displayInitials}</span>
+          <button className="flex w-full items-center justify-between rounded-xl px-3 py-2 transition-colors hover:bg-slate-100">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${displayColor} flex-shrink-0`}>
+                <span className="text-sm font-bold text-slate-900">{displayInitials}</span>
               </div>
               {sidebarOpen && (
-                <span className="font-medium text-white truncate">{displayName}</span>
+                <span className="font-medium text-slate-700 truncate">{displayName}</span>
               )}
             </div>
-            {sidebarOpen && <ChevronDown size={16} className="text-gray-400 flex-shrink-0" />}
+            {sidebarOpen && <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent 

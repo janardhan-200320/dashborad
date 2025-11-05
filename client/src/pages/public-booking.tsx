@@ -29,6 +29,20 @@ import {
   type CalendarEvent 
 } from '@/lib/calendar-utils';
 
+interface BookingPageSettings {
+  businessName: string;
+  bookingUrl: string;
+  welcomeMessage: string;
+  backgroundColor: string;
+  textColor: string;
+  buttonColor: string;
+  showLogo: boolean;
+  metaTitle: string;
+  metaDescription: string;
+  metaKeywords: string;
+  socialImage: string;
+}
+
 type DynamicFieldType = 'text' | 'email' | 'tel' | 'date' | 'number' | 'textarea';
 interface LoginField {
   id: string;
@@ -54,6 +68,13 @@ interface TimeSlot {
   available: boolean;
 }
 
+interface AvailabilitySchedule {
+  day: string;
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+}
+
 export default function PublicBookingPage() {
   const [, params] = useRoute('/book/:serviceId');
   const serviceId = params?.serviceId;
@@ -66,6 +87,12 @@ export default function PublicBookingPage() {
   // Dynamic booking form fields driven by Admin Center -> Customer Login Preferences
   const [loginFields, setLoginFields] = useState<LoginField[]>([]);
   const [formData, setFormData] = useState<Record<string, string>>({});
+  const [orgSchedule, setOrgSchedule] = useState<Record<string, { enabled: boolean; start: string; end: string }>>({});
+  const [specialHours, setSpecialHours] = useState<Array<{ date: string; startTime: string; endTime: string }>>([]);
+  const [unavailability, setUnavailability] = useState<Array<{ startDate: string; endDate: string }>>([]);
+  const [bookingSettings, setBookingSettings] = useState<BookingPageSettings | null>(null);
+  const [memberSchedule, setMemberSchedule] = useState<Record<string, { enabled: boolean; start: string; end: string }> | null>(null);
+  const [assignedMemberId, setAssignedMemberId] = useState<string | null>(null);
 
   // Load booking form field configuration
   useEffect(() => {
@@ -107,6 +134,51 @@ export default function PublicBookingPage() {
       loadOrgDefaults();
     }
   }, [callData]);
+
+  // Load organization business hours
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('zervos_business_hours');
+      if (raw) {
+        const data = JSON.parse(raw);
+        const scheduleArr = Array.isArray(data?.schedule) ? data.schedule : [];
+        const map: Record<string, { enabled: boolean; start: string; end: string }> = {};
+        const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        const byDay: Record<string, any> = {};
+        scheduleArr.forEach((d: any) => { byDay[d.day] = d; });
+        days.forEach(day => {
+          const entry = byDay[day];
+          if (entry) {
+            map[day] = { enabled: !!entry.enabled, start: entry.startTime || '09:00', end: entry.endTime || '17:00' };
+          }
+        });
+        setOrgSchedule(map);
+        setSpecialHours(Array.isArray(data?.specialHours) ? data.specialHours : []);
+        setUnavailability(Array.isArray(data?.unavailability) ? data.unavailability : []);
+      }
+    } catch {}
+  }, []);
+
+  // Load booking page settings (branding/SEO)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('zervos_booking_page');
+      if (raw) {
+        const s: BookingPageSettings = JSON.parse(raw);
+        setBookingSettings(s);
+        if (s.metaTitle) document.title = s.metaTitle;
+        if (s.metaDescription) {
+          let tag = document.querySelector('meta[name="description"]');
+          if (!tag) {
+            tag = document.createElement('meta');
+            tag.setAttribute('name', 'description');
+            document.head.appendChild(tag);
+          }
+          tag.setAttribute('content', s.metaDescription);
+        }
+      }
+    } catch {}
+  }, []);
 
   // Load service data dynamically from localStorage (workspace-aware)
   useEffect(() => {
@@ -198,7 +270,7 @@ export default function PublicBookingPage() {
         return 'Team Member';
       };
 
-      const hostName = resolveMemberName(primaryAssigneeId);
+  const hostName = resolveMemberName(primaryAssigneeId);
 
       // 3) Map meeting mode to location type
       let locationType: 'in-person' | 'phone' | 'video' | 'custom' = 'video';
@@ -228,6 +300,27 @@ export default function PublicBookingPage() {
         color: 'from-purple-500 to-pink-500'
       });
       setCallData(salesCall);
+
+      // 5b) Resolve primary assignee weekly schedule from Admin Salespersons
+      const resolveMemberSchedule = (id: string | null) => {
+        if (!id) return null;
+        try {
+          const raw = localStorage.getItem('zervos_salespersons');
+          if (!raw) return null;
+          const arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) return null;
+          const person = arr.find((p: any) => p?.id === id || p?.email === id);
+          const schedule: AvailabilitySchedule[] | undefined = person?.availabilitySchedule;
+          if (!schedule || !Array.isArray(schedule)) return null;
+          const map: Record<string, { enabled: boolean; start: string; end: string }> = {};
+          for (const d of schedule) {
+            map[d.day] = { enabled: !!d.enabled, start: d.startTime || '09:00', end: d.endTime || '17:00' };
+          }
+          return map;
+        } catch { return null; }
+      };
+  setMemberSchedule(resolveMemberSchedule(primaryAssigneeId));
+  setAssignedMemberId(primaryAssigneeId);
     } catch (error) {
       // Fallback to default on error
       setService({
@@ -243,6 +336,30 @@ export default function PublicBookingPage() {
       setCallData(null);
     }
   }, [serviceId]);
+
+  // Refresh member schedule if admin data changes in another tab
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'zervos_salespersons' && callData && Array.isArray(callData.assignedSalespersons) && callData.assignedSalespersons[0]) {
+        try {
+          const raw = localStorage.getItem('zervos_salespersons');
+          if (!raw) return;
+          const arr = JSON.parse(raw);
+          const person = Array.isArray(arr) ? arr.find((p: any) => p?.id === callData.assignedSalespersons[0] || p?.email === callData.assignedSalespersons[0]) : null;
+          const schedule: AvailabilitySchedule[] | undefined = person?.availabilitySchedule;
+          if (schedule && Array.isArray(schedule)) {
+            const map: Record<string, { enabled: boolean; start: string; end: string }> = {};
+            for (const d of schedule) {
+              map[d.day] = { enabled: !!d.enabled, start: d.startTime || '09:00', end: d.endTime || '17:00' };
+            }
+            setMemberSchedule(map);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [callData]);
 
   // Generate calendar days for current month
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -271,7 +388,7 @@ export default function PublicBookingPage() {
     setCalendarDays(days);
   };
 
-  // Generate time slots
+  // Base time slots
   const timeSlots: TimeSlot[] = [
     { time: '09:00 AM', available: true },
     { time: '09:30 AM', available: true },
@@ -291,11 +408,119 @@ export default function PublicBookingPage() {
     { time: '05:00 PM', available: true },
   ];
 
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
   const isDateAvailable = (date: Date) => {
-    const day = date.getDay();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return date >= today && day !== 0 && day !== 6; // Not Sunday or Saturday
+
+    // Not in the past
+    if (date < today) return false;
+
+    // Enforce booking window if set
+    const bookingWindowDays = callData?.limits?.bookingWindowDays;
+    if (typeof bookingWindowDays === 'number' && bookingWindowDays > 0) {
+      const lastDate = new Date(today);
+      lastDate.setDate(lastDate.getDate() + bookingWindowDays);
+      if (date > lastDate) return false;
+    }
+
+    // Unavailability overrides (org-wide)
+    for (const u of unavailability) {
+      if (!u.startDate || !u.endDate) continue;
+      const start = new Date(u.startDate); start.setHours(0,0,0,0);
+      const end = new Date(u.endDate); end.setHours(23,59,59,999);
+      if (date >= start && date <= end) return false;
+    }
+
+    const dayName = dayNames[date.getDay()];
+
+    // Member schedule must allow the day if present
+    if (memberSchedule) {
+      const m = memberSchedule[dayName];
+      if (!m || m.enabled === false) return false;
+    }
+
+    // Per-call availability (if present) must also allow the day
+    if (callData?.availability) {
+      const cfg = callData.availability[dayName];
+      if (!cfg || cfg.enabled === false) return false;
+      return true;
+    }
+
+    // Fallback to organization schedule (if set)
+    const org = orgSchedule[dayName];
+    if (org) return !!org.enabled;
+
+    // Default allow if no specific restrictions
+    return true;
+  };
+
+  const parseTimeToDate = (date: Date, time12: string) => {
+    // time like '09:30 AM'
+    const [timePart, meridian] = time12.split(' ');
+    const [hourStr, minuteStr] = timePart.split(':');
+    let hours = parseInt(hourStr, 10);
+    const minutes = parseInt(minuteStr, 10);
+    if (meridian === 'PM' && hours !== 12) hours += 12;
+    if (meridian === 'AM' && hours === 12) hours = 0;
+    const d = new Date(date);
+    d.setHours(hours, minutes, 0, 0);
+    return d;
+  };
+
+  const isSlotWithinAvailability = (date: Date, slot: string) => {
+    const dayName = dayNames[date.getDay()];
+    const slotDate = parseTimeToDate(date, slot);
+    const within = (startHHMM?: string, endHHMM?: string, enabled?: boolean) => {
+      if (enabled === false) return false;
+      if (!startHHMM || !endHHMM) return true;
+      const [sH, sM] = startHHMM.split(':').map((n: string) => parseInt(n, 10));
+      const [eH, eM] = endHHMM.split(':').map((n: string) => parseInt(n, 10));
+      const start = new Date(date); start.setHours(sH || 0, sM || 0, 0, 0);
+      const end = new Date(date); end.setHours(eH || 0, eM || 0, 0, 0);
+      return slotDate >= start && slotDate <= end;
+    };
+
+    // Special hours intersect: if exists for this date, the slot must be within special hours
+    const dateISO = date.toISOString().split('T')[0];
+    const special = specialHours.find(sh => sh.date === dateISO);
+    const allowedBySpecial = special ? within(special.startTime, special.endTime, true) : true;
+
+    // Call-specific window
+    let allowedByCall = true;
+    if (callData?.availability) {
+      const cfg = callData.availability[dayName];
+      if (!cfg || cfg.enabled === false) return false; // if call disables day, slot is not allowed
+      allowedByCall = within(cfg.start, cfg.end, cfg.enabled !== false);
+    }
+
+    // Org schedule (only used when call availability is absent)
+    let allowedByOrg = true;
+    if (!callData?.availability) {
+      const org = orgSchedule[dayName];
+      if (!org || org.enabled === false) return false;
+      allowedByOrg = within(org.start, org.end, org.enabled);
+    }
+
+    // Member schedule must also allow
+    let allowedByMember = true;
+    if (memberSchedule) {
+      const m = memberSchedule[dayName];
+      if (!m || m.enabled === false) return false;
+      allowedByMember = within(m.start, m.end, m.enabled);
+    }
+
+    return allowedBySpecial && allowedByCall && allowedByOrg && allowedByMember;
+  };
+
+  const passesMinNotice = (date: Date, slot: string) => {
+    const minNoticeHours = callData?.limits?.minNoticeHours || 0;
+    if (!minNoticeHours) return true;
+    const now = new Date();
+    const minDateTime = new Date(now.getTime() + minNoticeHours * 60 * 60 * 1000);
+    const slotDate = parseTimeToDate(date, slot);
+    return slotDate >= minDateTime;
   };
 
   const isSameDay = (date1: Date, date2: Date) => {
@@ -341,6 +566,9 @@ export default function PublicBookingPage() {
         email: (emailField && formData[emailField.id]) || '',
         phone: (phoneField && formData[phoneField.id]) || formData['phone'] || '',
         serviceName: service?.name || 'Service',
+        serviceId: callData?.id || serviceId || '',
+        assignedMemberId: assignedMemberId || '',
+        assignedMemberName: service?.hostName || '',
         date: selectedDate ? selectedDate.toISOString().split('T')[0] : '',
         time: selectedTime || '',
         status: 'upcoming' as const,
@@ -479,13 +707,20 @@ export default function PublicBookingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50">
       <div className="max-w-6xl mx-auto p-4 md:p-8">
-        {/* Header */}
+        {/* Header (reflects Admin Booking Page colors) */}
         <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Building2 size={32} className="text-purple-600" />
-            <h1 className="text-3xl font-bold text-gray-900">Zervos Bookings</h1>
+          <div
+            className="inline-block rounded-xl px-6 py-5"
+            style={bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, color: bookingSettings.textColor } : undefined}
+          >
+            <div className="flex items-center justify-center gap-2 mb-2" style={bookingSettings ? { color: bookingSettings.textColor } : undefined}>
+              <Building2 size={32} />
+              <h1 className="text-3xl font-bold">{bookingSettings?.businessName || 'Zervos Bookings'}</h1>
+            </div>
+            <p>
+              {bookingSettings?.welcomeMessage || 'Book your appointment in a few simple steps'}
+            </p>
           </div>
-          <p className="text-gray-600">Book your appointment in a few simple steps</p>
         </div>
 
         {/* Step Indicator */}
@@ -519,8 +754,11 @@ export default function PublicBookingPage() {
           <div className="lg:col-span-1">
             <Card className="sticky top-4">
               <CardContent className="p-6 space-y-4">
-                {/* Service Icon */}
-                <div className={`h-16 w-16 rounded-full bg-gradient-to-br ${service.color} flex items-center justify-center text-white font-bold text-2xl mx-auto`}>
+                {/* Service Icon (use brand color) */}
+                <div
+                  className="h-16 w-16 rounded-full flex items-center justify-center font-bold text-2xl mx-auto"
+                  style={bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, color: bookingSettings.textColor || '#ffffff' } : undefined}
+                >
                   {service.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                 </div>
 
@@ -615,8 +853,9 @@ export default function PublicBookingPage() {
                                   ? 'hover:bg-purple-100 text-gray-900 cursor-pointer'
                                   : 'text-gray-300 cursor-not-allowed'
                                 }
-                                ${isSelected ? 'bg-purple-600 text-white hover:bg-purple-700' : ''}
+                                ${isSelected ? 'text-white' : ''}
                               `}
+                              style={isSelected && bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, borderColor: bookingSettings.backgroundColor } : undefined}
                             >
                               {date.getDate()}
                             </button>
@@ -630,16 +869,19 @@ export default function PublicBookingPage() {
                       <div>
                         <h3 className="text-lg font-semibold mb-4">Available Times</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                          {timeSlots.map((slot) => (
+                          {timeSlots
+                            .filter((s) => isSlotWithinAvailability(selectedDate, s.time))
+                            .filter((s) => passesMinNotice(selectedDate, s.time))
+                            .map((slot) => (
                             <Button
                               key={slot.time}
                               variant={selectedTime === slot.time ? 'default' : 'outline'}
                               disabled={!slot.available}
                               onClick={() => handleTimeSelect(slot.time)}
                               className={`
-                                ${selectedTime === slot.time ? 'bg-purple-600 hover:bg-purple-700' : ''}
                                 ${!slot.available ? 'opacity-50 cursor-not-allowed' : ''}
                               `}
+                              style={selectedTime === slot.time && bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, borderColor: bookingSettings.backgroundColor, color: bookingSettings.buttonColor || '#ffffff' } : undefined}
                             >
                               {slot.time}
                             </Button>
@@ -655,13 +897,13 @@ export default function PublicBookingPage() {
                         disabled={!selectedDate || !selectedTime}
                         className="bg-purple-600 hover:bg-purple-700"
                         size="lg"
+                        style={bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, borderColor: bookingSettings.backgroundColor, color: bookingSettings.buttonColor || '#ffffff' } : undefined}
                       >
                         Continue
                       </Button>
                     </div>
                   </div>
                 )}
-
                 {/* STEP 2: Enter Details */}
                 {step === 2 && (
                   <div className="space-y-6">
@@ -708,6 +950,7 @@ export default function PublicBookingPage() {
                         onClick={handleContinue}
                         disabled={!loginFields.every((f) => !f.required || (formData[f.id] && formData[f.id].trim().length > 0))}
                         className="bg-purple-600 hover:bg-purple-700"
+                        style={bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, borderColor: bookingSettings.backgroundColor, color: bookingSettings.buttonColor || '#ffffff' } : undefined}
                         size="lg"
                       >
                         Book Appointment
@@ -797,7 +1040,6 @@ export default function PublicBookingPage() {
                         </Button>
                       </div>
                     </div>
-
                     {/* Actions */}
                     <div className="pt-4">
                       <Button 

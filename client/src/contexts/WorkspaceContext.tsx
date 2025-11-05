@@ -28,15 +28,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Load company info for default workspace
-    const companyData = localStorage.getItem('zervos_company');
-    const company = companyData ? JSON.parse(companyData) : null;
+    let company: any = null;
+    try {
+      const companyData = localStorage.getItem('zervos_company');
+      company = companyData ? JSON.parse(companyData) : null;
+    } catch {
+      company = null;
+    }
     
     // Load workspaces from localStorage
-    const workspacesData = localStorage.getItem('workspaces');
     let parsed: Workspace[] = [];
-    
-    if (workspacesData) {
-      parsed = JSON.parse(workspacesData);
+    try {
+      const workspacesData = localStorage.getItem('workspaces');
+      if (workspacesData) {
+        parsed = JSON.parse(workspacesData);
+      }
+    } catch {
+      parsed = [];
     }
     
     // If no workspaces exist, create a default one
@@ -55,13 +63,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       };
       
       parsed = [defaultWorkspace];
-      localStorage.setItem('workspaces', JSON.stringify(parsed));
+      try { localStorage.setItem('workspaces', JSON.stringify(parsed)); } catch {}
     }
     
     setWorkspacesState(parsed);
     
     // Load selected workspace or auto-select the first one
-    const selectedId = localStorage.getItem('selectedWorkspaceId');
+    const selectedId = (() => { try { return localStorage.getItem('selectedWorkspaceId'); } catch { return null; } })();
     let selected = null;
     
     if (selectedId) {
@@ -71,7 +79,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // If no workspace selected, auto-select the first one
     if (!selected && parsed.length > 0) {
       selected = parsed[0];
-      localStorage.setItem('selectedWorkspaceId', selected.id);
+      try { localStorage.setItem('selectedWorkspaceId', selected.id); } catch {}
     }
     
     if (selected) {
@@ -82,15 +90,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const setSelectedWorkspace = (workspace: Workspace | null) => {
     setSelectedWorkspaceState(workspace);
     if (workspace) {
-      localStorage.setItem('selectedWorkspaceId', workspace.id);
+      try { localStorage.setItem('selectedWorkspaceId', workspace.id); } catch {}
     } else {
-      localStorage.removeItem('selectedWorkspaceId');
+      try { localStorage.removeItem('selectedWorkspaceId'); } catch {}
     }
   };
 
   const setWorkspaces = (newWorkspaces: Workspace[]) => {
     setWorkspacesState(newWorkspaces);
-    localStorage.setItem('workspaces', JSON.stringify(newWorkspaces));
+    try { localStorage.setItem('workspaces', JSON.stringify(newWorkspaces)); } catch {}
     
     // Update selected workspace if it was modified
     if (selectedWorkspace) {
@@ -99,9 +107,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setSelectedWorkspaceState(updated);
       } else {
         setSelectedWorkspaceState(null);
-        localStorage.removeItem('selectedWorkspaceId');
+        try { localStorage.removeItem('selectedWorkspaceId'); } catch {}
       }
     }
+    
+    // Notify other components about workspace changes
+    window.dispatchEvent(new Event('localStorageChanged'));
   };
 
   return (

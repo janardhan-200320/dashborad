@@ -95,6 +95,7 @@ export default function Resources() {
     const storageKey = selectedWorkspace ? `zervos_resources_${selectedWorkspace.id}` : 'zervos_resources';
     localStorage.setItem(storageKey, JSON.stringify(updatedResources));
     setResources(updatedResources);
+    window.dispatchEvent(new Event('localStorageChanged'));
   };
 
   const handleSaveResource = async (resource: InsertResource) => {

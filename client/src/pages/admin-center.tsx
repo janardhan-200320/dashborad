@@ -372,7 +372,7 @@ export default function AdminCenterPage() {
                       <div 
                         key={cardIndex}
                         onClick={handleCardClick}
-                        className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all cursor-pointer group"
+                        className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg hover:border-purple-300 transition-all duration-200 hover:-translate-y-0.5 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]"
                       >
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">

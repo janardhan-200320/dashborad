@@ -32,6 +32,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Salesperson {
   id: string;
@@ -44,6 +45,7 @@ interface Salesperson {
 
 export default function SalespersonsPage() {
   const [company, setCompany] = useState<any>(null);
+  const [orgLabels, setOrgLabels] = useState<{ teamMemberLabel?: string } | null>(null);
   const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,6 +54,7 @@ export default function SalespersonsPage() {
     emails: '',
     role: 'Salesperson' as Salesperson['role'],
   });
+  const [loading, setLoading] = useState(true);
 
   const { toast } = useToast();
 
@@ -59,12 +62,33 @@ export default function SalespersonsPage() {
     try {
       const raw = localStorage.getItem('zervos_company');
       if (raw) setCompany(JSON.parse(raw));
-      
-      // Load salespersons from localStorage
+      const orgSettingsRaw = localStorage.getItem('zervos_organization_settings');
+      if (orgSettingsRaw) {
+        try {
+          const org = JSON.parse(orgSettingsRaw);
+          const tm = org?.labels?.teamMemberLabel || org?.teamMemberLabel;
+          if (tm) setOrgLabels({ teamMemberLabel: tm });
+        } catch {}
+      }
+
+      // Load salespersons from localStorage (prefer unified admin store, fallback to team members)
+      const savedAdmin = localStorage.getItem('zervos_salespersons');
+      if (savedAdmin) {
+        const list = JSON.parse(savedAdmin);
+        const formatted = list.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          role: p.role === 'Staff' ? 'Salesperson' : (p.role || 'Salesperson'),
+          color: p.color || getRandomColor()
+        }));
+        setSalespersons(formatted);
+        return;
+      }
       const savedMembers = localStorage.getItem('zervos_team_members');
       if (savedMembers) {
         const members = JSON.parse(savedMembers);
-        const formatted = members.map((member: any, index: number) => ({
+        const formatted = members.map((member: any) => ({
           id: member.id,
           name: member.name,
           email: member.email,
@@ -74,9 +98,11 @@ export default function SalespersonsPage() {
         setSalespersons(formatted);
       }
     } catch {}
+    const t = setTimeout(() => setLoading(false), 250);
+    return () => clearTimeout(t);
   }, []);
 
-  const teamMemberLabel = company?.teamMemberLabel || 'Salespersons';
+  const teamMemberLabel = orgLabels?.teamMemberLabel || company?.teamMemberLabel || 'Salespersons';
   const teamMemberSingular = teamMemberLabel.endsWith('s') 
     ? teamMemberLabel.slice(0, -1) 
     : teamMemberLabel;
@@ -112,9 +138,33 @@ export default function SalespersonsPage() {
 
     const updatedSalespersons = [...salespersons, ...newSalespersons];
     setSalespersons(updatedSalespersons);
-    
-    // Save to localStorage
+
+    // Save to localStorage (both stores) and notify others
     localStorage.setItem('zervos_team_members', JSON.stringify(updatedSalespersons));
+    try {
+      // Convert to admin/salespersons richer shape to keep Admin Center in sync immediately
+      const toAdmin = (items: typeof updatedSalespersons) => items.map((m) => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        phone: (m as any).phone || '',
+        role: m.role === 'Salesperson' ? 'Staff' : m.role,
+        workspace: (m as any).workspace || 'bharath',
+        status: (m as any).status || 'Active',
+        availability: (m as any).availability || 'Full Time',
+        workload: (m as any).workload || 'Low',
+        profilePicture: (m as any).profilePicture || undefined,
+        permissions: undefined,
+        availabilitySchedule: undefined,
+        timezone: (m as any).timezone || 'Asia/Kolkata',
+        totalBookings: (m as any).appointmentsCount || 0,
+        averageRating: (m as any).averageRating || 0,
+        bookingLink: (m as any).bookingLink || `${window.location.origin}/book/${m.id}`,
+        notes: (m as any).notes || ''
+      }));
+      localStorage.setItem('zervos_salespersons', JSON.stringify(toAdmin(updatedSalespersons)));
+    } catch {}
+    window.dispatchEvent(new CustomEvent('team-members-updated'));
     
     setIsAddOpen(false);
     setNewPerson({
@@ -140,6 +190,19 @@ export default function SalespersonsPage() {
     const updated = salespersons.filter(p => p.id !== id);
     setSalespersons(updated);
     localStorage.setItem('zervos_team_members', JSON.stringify(updated));
+    try {
+      const toAdmin = (items: typeof updated) => items.map((m) => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        role: m.role === 'Salesperson' ? 'Staff' : m.role,
+        workspace: (m as any).workspace || 'bharath',
+        status: (m as any).status || 'Active',
+        availability: (m as any).availability || 'Full Time',
+      }));
+      localStorage.setItem('zervos_salespersons', JSON.stringify(toAdmin(updated)));
+    } catch {}
+    window.dispatchEvent(new CustomEvent('team-members-updated'));
     toast({
       title: "Deleted",
       description: `${teamMemberSingular} removed successfully`,
@@ -208,12 +271,33 @@ export default function SalespersonsPage() {
         </div>
 
         {/* Salespersons Grid */}
-        {filteredSalespersons.length > 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={`s-${i}`} className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-12 w-12 rounded-full" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+                <Skeleton className="h-4 w-56" />
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <Skeleton className="h-10 w-full rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredSalespersons.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredSalespersons.map((person) => (
               <div 
                 key={person.id}
-                className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-all"
+                className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">

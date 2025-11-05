@@ -1,24 +1,26 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
-import { 
-  Calendar, 
-  Users, 
-  Settings, 
-  BarChart3, 
+import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
+import {
+  Calendar,
+  Users,
+  Settings,
   FileText,
-  Home,
   Building2,
   Menu,
-  X,
-  LogOut,
   PhoneCall,
   LayoutGrid,
-  Clock3,
-  Briefcase
+  Bell,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
 import WorkspaceSelector from './WorkspaceSelector';
+import AnimatedButton from './AnimatedButton';
+import PageTransition from './PageTransition';
+import TopProgressBar from './TopProgressBar';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { safeGetItem } from '@/lib/storage';
 
 interface Company {
   name: string;
@@ -33,23 +35,24 @@ interface Company {
 
 const DashboardLayout = ({ children }: { children: ReactNode }) => {
   const [location] = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [hoveredNav, setHoveredNav] = useState<string | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [orgLogo, setOrgLogo] = useState<string>('');
   const { selectedWorkspace } = useWorkspace();
 
   useEffect(() => {
-    const savedCompany = localStorage.getItem('zervos_company');
+    const savedCompany = safeGetItem<Company | null>('zervos_company', null);
     if (savedCompany) {
-      setCompany(JSON.parse(savedCompany));
+      setCompany(savedCompany);
     }
 
     // Load organization settings for logo
     const loadOrgSettings = () => {
-      const orgSettings = localStorage.getItem('zervos_organization_settings');
-      if (orgSettings) {
-        const settings = JSON.parse(orgSettings);
-        setOrgLogo(settings.logo || '');
+      const settings = safeGetItem<any>('zervos_organization_settings', null);
+      if (settings && typeof settings === 'object' && settings.logo) {
+        setOrgLogo(settings.logo);
       }
     };
 
@@ -87,175 +90,325 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
 
   const isActive = (path: string) => location === path;
 
-  const handleLogout = () => {
-    localStorage.removeItem('zervos_company');
-    window.location.href = '/';
-  };
+  const activeNavItem = [...navigation, ...secondaryNavigation].find(item => isActive(item.path));
 
-  return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className={`bg-[#0a1628] text-white transition-all duration-300 ${
-        sidebarOpen ? 'w-64' : 'w-20'
-      } flex flex-col`}>
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-700">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {orgLogo ? (
-                <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex-shrink-0">
-                  <img 
-                    src={orgLogo} 
-                    alt="Logo" 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <Building2 size={24} />
-              )}
-              {sidebarOpen && (
-                <div>
-                  <h1 className="font-bold text-lg">Zervos</h1>
-                  {company && (
-                    <p className="text-xs text-gray-400 truncate">{company.name}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <button 
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1 hover:bg-gray-700 rounded lg:hidden"
+  const renderNavItems = (expanded: boolean) => (
+    <LayoutGroup>
+      {[...navigation, { divider: true }, ...secondaryNavigation].map((item) => {
+        if ('divider' in item) {
+          return <div key="divider" className="mx-4 my-4 h-px bg-slate-200" />;
+        }
+
+        const active = isActive(item.path);
+
+        return (
+          <Link key={item.path} href={item.path}>
+            <a
+              onMouseEnter={() => !expanded && setHoveredNav(item.path)}
+              onMouseLeave={() => setHoveredNav(prev => (prev === item.path ? null : prev))}
+              className={`relative flex items-center ${
+                expanded ? 'gap-3 px-4 py-3' : 'justify-center px-2 py-3'
+              } text-sm font-medium text-slate-600 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 rounded-xl overflow-visible`}
             >
-              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-            </button>
+              <motion.span
+                className="relative z-10 flex items-center justify-center"
+                initial={false}
+                animate={{ scale: active ? 1.05 : 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              >
+                <item.icon size={20} className={active ? 'text-brand-600' : 'text-slate-400'} />
+              </motion.span>
+
+              {expanded && <span className={`relative z-10 ${active ? 'text-brand-700' : 'text-slate-600'}`}>{item.name}</span>}
+
+              {active && (
+                <motion.span
+                  layoutId="nav-active"
+                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-500/10 to-purple-500/10 shadow-[0_12px_30px_-15px_rgba(79,70,229,0.45)] border border-brand-200/70"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+
+              <AnimatePresence>
+                {!expanded && hoveredNav === item.path && (
+                  <motion.span
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.2 }}
+                    className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-lg ring-1 ring-slate-200"
+                  >
+                    {item.name}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </a>
+          </Link>
+        );
+      })}
+    </LayoutGroup>
+  );
+
+  const SidebarShell = ({ expanded }: { expanded: boolean }) => (
+    <motion.aside
+      initial={false}
+      animate={{ width: expanded ? 280 : 96 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 28 }}
+      className="relative z-30 hidden h-full flex-col overflow-hidden border-r border-slate-200 bg-white/90 text-slate-800 shadow-2xl backdrop-blur-xl lg:flex"
+    >
+      <div className="relative px-4 pb-4 pt-6">
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <motion.div
+              layout
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-500 shadow-lg"
+            >
+              {orgLogo ? (
+                <img src={orgLogo} alt="Logo" className="h-10 w-10 rounded-xl object-cover" />
+              ) : (
+                <Building2 size={20} className="text-white" />
+              )}
+            </motion.div>
+            {expanded && (
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-800">
+                  <Sparkles size={14} className="text-brand-500" />
+                  <span>Zervos Admin</span>
+                </div>
+                {company ? (
+                  <p className="text-xs text-slate-500">{company.name}</p>
+                ) : (
+                  <p className="text-xs text-slate-500">Crafting stellar bookings</p>
+                )}
+              </div>
+            )}
           </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setSidebarExpanded(!expanded)}
+            className="hidden rounded-lg bg-white p-2 text-slate-500 shadow-inner ring-1 ring-slate-200/60 transition lg:inline-flex"
+            aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+          >
+            <Menu size={18} />
+          </motion.button>
         </div>
 
-        {/* Workspace Selector */}
-        <WorkspaceSelector sidebarOpen={sidebarOpen} />
+        <WorkspaceSelector sidebarOpen={expanded} />
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4">
-          <div className="space-y-1">
-            {navigation.map((item) => (
-              <Link
-                key={item.path}
-                href={item.path}
-              >
-                <a
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
-                    isActive(item.path)
-                      ? 'bg-[#1e3a5f] border-l-4 border-blue-400'
-                      : 'hover:bg-gray-800 border-l-4 border-transparent'
-                  }`}
-                >
-                  <item.icon size={20} />
-                  {sidebarOpen && <span className="font-medium">{item.name}</span>}
-                </a>
-              </Link>
-            ))}
-          </div>
+        <div className="mt-2 flex-1 space-y-1 overflow-y-auto pb-6">
+          {renderNavItems(expanded)}
+        </div>
 
-          {/* Divider */}
-          <div className="my-4 mx-4 border-t border-gray-700"></div>
-
-          {/* Secondary Navigation */}
-          <div className="space-y-1">
-            {secondaryNavigation.map((item) => (
-              <Link
-                key={item.path}
-                href={item.path}
-              >
-                <a
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
-                    isActive(item.path)
-                      ? 'bg-[#1e3a5f] border-l-4 border-blue-400'
-                      : 'hover:bg-gray-800 border-l-4 border-transparent'
-                  }`}
-                >
-                  <item.icon size={20} />
-                  {sidebarOpen && <span className="font-medium">{item.name}</span>}
-                </a>
-              </Link>
-            ))}
-          </div>
-        </nav>
-
-        {/* User Section */}
-        <div className="border-t border-gray-700 p-4">
-          {sidebarOpen ? (
-            <div className="flex items-center gap-3">
-              <ProfileDropdown />
-              <div className="flex-1 ml-2">
-                <p className="font-medium text-sm">Admin User</p>
-                <p className="text-xs text-gray-400">admin@zervos.com</p>
+        <div className="mt-auto rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-600">
+          <div className="mb-3 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-300 to-pink-400 shadow-lg">
+              <ShieldCheck className="h-5 w-5 text-white" />
+            </div>
+            {expanded && (
+              <div>
+                <p className="font-semibold text-slate-800">Pro Features</p>
+                <p className="text-[11px] text-slate-500">Unlock automated workflows and premium analytics.</p>
               </div>
-            </div>
-          ) : (
-            <div className="flex justify-center">
-              <ProfileDropdown />
-            </div>
+            )}
+          </div>
+          {expanded && (
+            <AnimatedButton size="sm" className="w-full justify-center" onClick={() => setMobileSidebarOpen(false)}>
+              Explore Upgrades
+            </AnimatedButton>
           )}
         </div>
+
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <ProfileDropdown />
+            {expanded && (
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Admin User</p>
+                <p className="text-xs text-slate-500">admin@zervos.com</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.aside>
+  );
+
+  const MobileSidebar = () => (
+    <AnimatePresence>
+      {mobileSidebarOpen && (
+        <motion.div
+          className="fixed inset-0 z-50 flex lg:hidden"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            className="absolute inset-0 bg-slate-900/20"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+          <motion.aside
+            initial={{ x: -320 }}
+            animate={{ x: 0 }}
+            exit={{ x: -320 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 30 }}
+            className="relative z-10 flex h-full w-80 flex-col overflow-y-auto border-r border-slate-200 bg-white text-slate-800 shadow-2xl backdrop-blur-xl"
+          >
+            <div className="flex items-center justify-between px-5 py-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-purple-500">
+                  {orgLogo ? (
+                    <img src={orgLogo} alt="Logo" className="h-10 w-10 rounded-xl object-cover" />
+                  ) : (
+                    <Building2 size={20} className="text-white" />
+                  )}
+                </div>
+                <div className="text-slate-700">
+                  <p className="text-sm font-semibold">Zervos Admin</p>
+                  {company && <p className="text-xs text-slate-500">{company.name}</p>}
+                </div>
+              </div>
+
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                className="rounded-xl bg-slate-100 p-2 text-slate-500 ring-1 ring-slate-200"
+                onClick={() => setMobileSidebarOpen(false)}
+                aria-label="Close navigation"
+              >
+                <Menu size={18} />
+              </motion.button>
+            </div>
+
+            <WorkspaceSelector sidebarOpen={true} />
+
+            <div className="mt-2 flex-1 space-y-1 overflow-y-auto px-4 pb-6">
+              {renderNavItems(true)}
+            </div>
+
+            <div className="space-y-4 px-4 pb-6">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                <p className="text-sm font-semibold text-slate-800">Pro Features</p>
+                <p className="mt-1 text-xs text-slate-500">Unlock automated workflows and premium analytics.</p>
+                <AnimatedButton size="sm" className="mt-4 w-full justify-center" onClick={() => setMobileSidebarOpen(false)}>
+                  Explore Upgrades
+                </AnimatedButton>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                <ProfileDropdown />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Admin User</p>
+                  <p className="text-xs text-slate-500">admin@zervos.com</p>
+                </div>
+              </div>
+            </div>
+          </motion.aside>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  return (
+    <div className="relative flex min-h-screen overflow-hidden bg-slate-100">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <motion.div
+          animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.03, 1] }}
+          transition={{ repeat: Infinity, duration: 12, ease: 'easeInOut' }}
+          className="absolute -right-32 top-[-20%] h-[36rem] w-[36rem] rounded-full bg-purple-200/40 blur-[140px]"
+        />
+        <motion.div
+          animate={{ opacity: [0.3, 0.6, 0.3], scale: [0.95, 1.05, 0.95] }}
+          transition={{ repeat: Infinity, duration: 16, ease: 'easeInOut', delay: 1 }}
+          className="absolute left-[-20%] top-1/4 h-[28rem] w-[28rem] rounded-full bg-brand-200/40 blur-[120px]"
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.15),transparent_65%)]" />
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden p-2 hover:bg-gray-100 rounded"
+      <TopProgressBar />
+
+      <SidebarShell expanded={sidebarExpanded} />
+      <MobileSidebar />
+
+      <div className="relative flex flex-1 flex-col overflow-hidden">
+        <header className="relative z-20 border-b border-slate-200 bg-white/90 px-4 py-4 shadow-sm backdrop-blur-xl sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setMobileSidebarOpen(true)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200 lg:hidden"
+                aria-label="Open navigation"
               >
-                <Menu size={24} />
-              </button>
-              <h2 className="text-xl font-semibold text-gray-900">
-                {navigation.find(item => isActive(item.path))?.name || 'Dashboard'}
-              </h2>
+                <Menu size={18} />
+              </motion.button>
+              <div>
+                <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                  <Sparkles size={12} /> Experience
+                </p>
+                <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+                  {activeNavItem?.name || 'Dashboard'}
+                </h2>
+              </div>
             </div>
-            
-            <div className="flex items-center gap-4">
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="hidden h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500 ring-1 ring-slate-200 sm:inline-flex"
+                aria-label="Notifications"
+              >
+                <Bell size={18} />
+              </motion.button>
               {selectedWorkspace ? (
-                <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-purple-50 rounded-lg border border-purple-200">
-                  <div className={`w-10 h-10 ${selectedWorkspace.color} rounded-lg flex items-center justify-center`}>
-                    <span className="text-sm font-bold text-gray-900">{selectedWorkspace.initials}</span>
+                <motion.div
+                  layout
+                  className="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-slate-700 shadow-sm sm:flex"
+                >
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${selectedWorkspace.color} text-slate-900`}>
+                    <span className="text-sm font-bold">{selectedWorkspace.initials}</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{selectedWorkspace.name}</p>
-                    <p className="text-xs text-gray-500">
+                  <div className="text-left">
+                    <p className="text-sm font-semibold">{selectedWorkspace.name}</p>
+                    <p className="text-xs text-slate-500">
                       {selectedWorkspace.status} • {selectedWorkspace.email || 'No email'}
                     </p>
                   </div>
-                </div>
+                </motion.div>
               ) : company && (
-                <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-gray-100 rounded-lg">
-                  {orgLogo ? (
-                    <div className="w-8 h-8 rounded-md overflow-hidden bg-white flex-shrink-0">
-                      <img 
-                        src={orgLogo} 
-                        alt="Logo" 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <Building2 size={18} className="text-gray-600" />
-                  )}
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{company.name}</p>
-                    <p className="text-xs text-gray-500">{company.industry}</p>
+                <motion.div
+                  layout
+                  className="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-slate-700 shadow-sm sm:flex"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
+                    {orgLogo ? (
+                      <img src={orgLogo} alt="Logo" className="h-9 w-9 rounded-xl object-cover" />
+                    ) : (
+                      <Building2 size={18} className="text-slate-500" />
+                    )}
                   </div>
-                </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold">{company.name}</p>
+                    <p className="text-xs text-slate-500">{company.industry}</p>
+                  </div>
+                </motion.div>
               )}
+              <AnimatedButton size="sm" className="hidden sm:inline-flex" onClick={() => window.dispatchEvent(new CustomEvent('open-create-booking'))}>
+                Create Booking Page
+              </AnimatedButton>
               <ProfileDropdown />
             </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-auto">
-          {children}
+        <main className="relative flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
+          <PageTransition pathname={location}>
+            <div className="mx-auto w-full max-w-7xl">
+              {children}
+            </div>
+          </PageTransition>
         </main>
       </div>
     </div>

@@ -24,6 +24,12 @@ import Workspaces from "@/pages/admin/Workspaces";
 import WorkspaceView from "@/pages/admin/WorkspaceView";
 import Resources from "@/pages/admin/Resources";
 import NotFound from "@/pages/not-found";
+import TopProgressBar from "@/components/TopProgressBar";
+import TeamLogin from "@/pages/team/TeamLogin";
+import TeamDashboard from "@/pages/team/TeamDashboard";
+import TeamPublicView from "@/pages/team/TeamPublicView";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { useEffect } from "react";
 
 function Router() {
   return (
@@ -31,6 +37,9 @@ function Router() {
       <Route path="/" component={Onboarding} />
       <Route path="/success" component={Success} />
       <Route path="/book/:serviceId" component={PublicBookingPage} />
+  <Route path="/team/login" component={TeamLogin} />
+  <Route path="/team" component={TeamDashboard} />
+  <Route path="/team/public/:memberId" component={TeamPublicView} />
       <Route path="/dashboard" component={FormInfoPage} />
       <Route path="/dashboard/appointments" component={AppointmentsPage} />
       <Route path="/dashboard/workflows" component={WorkflowsPage} />
@@ -51,12 +60,43 @@ function Router() {
     </Switch>
   );
 }function App() {
+  useEffect(() => {
+    // Global error handler to catch unhandled promise rejections
+    const handleError = (event: ErrorEvent) => {
+      console.error('❌ GLOBAL ERROR CAUGHT:');
+      console.error('Message:', event.message);
+      console.error('Error:', event.error);
+      console.error('Filename:', event.filename);
+      console.error('Line:', event.lineno, 'Column:', event.colno);
+      console.error('Stack:', event.error?.stack);
+      event.preventDefault(); // Prevent default browser error handling
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('❌ UNHANDLED PROMISE REJECTION:');
+      console.error('Reason:', event.reason);
+      console.error('Promise:', event.promise);
+      event.preventDefault();
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <WorkspaceProvider>
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <ErrorBoundary>
+            <Toaster />
+            <TopProgressBar />
+            <Router />
+          </ErrorBoundary>
         </TooltipProvider>
       </WorkspaceProvider>
     </QueryClientProvider>

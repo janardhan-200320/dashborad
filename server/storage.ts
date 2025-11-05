@@ -25,7 +25,7 @@ export interface IStorage {
 
   // Appointments (sales call bookings)
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
-  getAppointments(): Promise<Appointment[]>;
+  getAppointments(filters?: { assignedMemberId?: string; serviceId?: string; status?: string }): Promise<Appointment[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -293,8 +293,18 @@ export class MemStorage implements IStorage {
     return apt;
   }
 
-  async getAppointments(): Promise<Appointment[]> {
-    return Array.from(this.appointments.values());
+  async getAppointments(filters?: { assignedMemberId?: string; serviceId?: string; status?: string }): Promise<Appointment[]> {
+    let list = Array.from(this.appointments.values());
+    if (filters?.assignedMemberId) {
+      list = list.filter(a => a.assignedMemberId === filters.assignedMemberId);
+    }
+    if (filters?.serviceId) {
+      list = list.filter(a => a.serviceId === filters.serviceId);
+    }
+    if (filters?.status) {
+      list = list.filter(a => a.status === (filters.status as any));
+    }
+    return list;
   }
 }
 
@@ -307,6 +317,9 @@ export interface Appointment {
   email: string;
   phone?: string;
   serviceName: string;
+  serviceId?: string;
+  assignedMemberId?: string;
+  assignedMemberName?: string;
   date: string; // YYYY-MM-DD
   time: string; // e.g., 10:30 AM
   status: 'upcoming' | 'completed' | 'cancelled';
