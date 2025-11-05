@@ -1,24 +1,27 @@
 import express from 'express';
-import db from '../database/init.js';
+import { supabase } from '../database/supabase.js';
 
 const router = express.Router();
+const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || 'b8035af1-4c81-40d9-a4ac-143350c3d41f';
 
 // GET all team members (with pagination)
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 100 } = req.query;
+    const { page = 1, limit = 100, organization_id = DEFAULT_ORG_ID } = req.query;
     const offset = (page - 1) * limit;
 
-    const total = db.prepare('SELECT COUNT(*) as count FROM team_members').get();
-    const members = db.prepare(`
-      SELECT * FROM team_members 
-      ORDER BY created_at DESC 
-      LIMIT ? OFFSET ?
-    `).all(parseInt(limit), offset);
+    const { data: members, error, count } = await supabase
+      .from('salespersons')
+      .select('*', { count: 'exact' })
+      .eq('organization_id', organization_id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
+
+    if (error) throw error;
 
     res.json({
-      count: total.count,
-      next: offset + members.length < total.count ? `?page=${parseInt(page) + 1}&limit=${limit}` : null,
+      count: count,
+      next: offset + members.length < count ? `?page=${parseInt(page) + 1}&limit=${limit}` : null,
       previous: page > 1 ? `?page=${parseInt(page) - 1}&limit=${limit}` : null,
       results: members
     });
@@ -28,9 +31,19 @@ router.get('/', (req, res) => {
 });
 
 // GET active team members
-router.get('/active', (req, res) => {
+router.get('/active', async (req, res) => {
   try {
-    const members = db.prepare('SELECT * FROM team_members WHERE is_active = 1 ORDER BY name').all();
+    const { organization_id = DEFAULT_ORG_ID } = req.query;
+
+    const { data: members, error } = await supabase
+      .from('salespersons')
+      .select('*')
+      .eq('organization_id', organization_id)
+      .eq('is_active', true)
+      .order('first_name', { ascending: true });
+
+    if (error) throw error;
+
     res.json(members);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -38,12 +51,21 @@ router.get('/active', (req, res) => {
 });
 
 // GET single team member
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const member = db.prepare('SELECT * FROM team_members WHERE id = ?').get(req.params.id);
-    if (!member) {
-      return res.status(404).json({ error: 'Team member not found' });
+    const { data: member, error } = await supabase
+      .from('salespersons')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Team member not found' });
+      }
+      throw error;
     }
+
     res.json(member);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -51,66 +73,70 @@ router.get('/:id', (req, res) => {
 });
 
 // CREATE team member
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const { name, email, role, avatar, color, is_active } = req.body;
+    const { first_name, last_name, email, role, avatar, color, is_active, organization_id = DEFAULT_ORG_ID } = req.body;
     
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Name and email are required' });
+    if (!first_name || !email) {
+      return res.status(400).json({ error: 'First name and email are required' });
     }
 
-    const insert = db.prepare(`
-      INSERT INTO team_members (name, email, role, avatar, color, is_active)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
+    const { data: member, error } = await supabase
+      .from('salespersons')
+      .insert([{
+        organization_id,
+        first_name,
+        last_name: last_name || '',
+        email,
+        role: role || 'salesperson',
+        avatar: avatar || null,
+        color: color || 'bg-gradient-to-r from-blue-500 to-purple-500',
+        is_active: is_active !== undefined ? is_active : true
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+      throw error;
+    }
     
-    const result = insert.run(
-      name, 
-      email, 
-      role || 'salesperson', 
-      avatar || null,
-      color || 'bg-gradient-to-r from-blue-500 to-purple-500',
-      is_active !== undefined ? (is_active ? 1 : 0) : 1
-    );
-    
-    const member = db.prepare('SELECT * FROM team_members WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(member);
   } catch (error) {
-    if (error.message.includes('UNIQUE constraint failed')) {
-      res.status(400).json({ error: 'Email already exists' });
-    } else {
-      res.status(500).json({ error: error.message });
-    }
+    res.status(500).json({ error: error.message });
   }
 });
 
 // UPDATE team member
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const { name, email, role, avatar, color, is_active } = req.body;
+    const { first_name, last_name, email, role, avatar, color, is_active } = req.body;
     
-    const update = db.prepare(`
-      UPDATE team_members 
-      SET name = ?, email = ?, role = ?, avatar = ?, color = ?, 
-          is_active = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
-    
-    const result = update.run(
-      name, 
-      email, 
-      role || 'salesperson', 
-      avatar || null,
-      color || 'bg-gradient-to-r from-blue-500 to-purple-500',
-      is_active !== undefined ? (is_active ? 1 : 0) : 1,
-      req.params.id
-    );
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Team member not found' });
+    const { data: member, error } = await supabase
+      .from('salespersons')
+      .update({
+        first_name,
+        last_name: last_name || '',
+        email,
+        role: role || 'salesperson',
+        avatar: avatar || null,
+        color: color || 'bg-gradient-to-r from-blue-500 to-purple-500',
+        is_active: is_active !== undefined ? is_active : true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Team member not found' });
+      }
+      throw error;
     }
     
-    const member = db.prepare('SELECT * FROM team_members WHERE id = ?').get(req.params.id);
     res.json(member);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -118,13 +144,14 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE team member
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM team_members WHERE id = ?').run(req.params.id);
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Team member not found' });
-    }
+    const { error } = await supabase
+      .from('salespersons')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
     
     res.status(204).send();
   } catch (error) {
@@ -133,19 +160,34 @@ router.delete('/:id', (req, res) => {
 });
 
 // POST toggle active
-router.post('/:id/toggle_active', (req, res) => {
+router.post('/:id/toggle_active', async (req, res) => {
   try {
-    const member = db.prepare('SELECT * FROM team_members WHERE id = ?').get(req.params.id);
+    const { data: member, error: fetchError } = await supabase
+      .from('salespersons')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
     
-    if (!member) {
-      return res.status(404).json({ error: 'Team member not found' });
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Team member not found' });
+      }
+      throw fetchError;
     }
 
-    const newStatus = member.is_active ? 0 : 1;
-    db.prepare('UPDATE team_members SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(newStatus, req.params.id);
+    const newStatus = !member.is_active;
     
-    res.json({ is_active: newStatus === 1 });
+    const { error: updateError } = await supabase
+      .from('salespersons')
+      .update({ 
+        is_active: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id);
+
+    if (updateError) throw updateError;
+    
+    res.json({ is_active: newStatus });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

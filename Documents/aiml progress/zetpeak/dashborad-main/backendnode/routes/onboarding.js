@@ -1,26 +1,27 @@
 import express from 'express';
-import db from '../database/init.js';
+import { supabase } from '../database/supabase.js';
 
 const router = express.Router();
+const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || 'b8035af1-4c81-40d9-a4ac-143350c3d41f';
 
 // GET all onboarding records
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const onboarding = db.prepare('SELECT * FROM business_onboarding ORDER BY created_at DESC').all();
-    
-    // Parse JSON fields
-    const formatted = onboarding.map(item => ({
-      ...item,
-      industries: item.industries ? JSON.parse(item.industries) : [],
-      business_needs: item.business_needs ? JSON.parse(item.business_needs) : [],
-      available_days: item.available_days ? JSON.parse(item.available_days) : []
-    }));
+    const { organization_id = DEFAULT_ORG_ID } = req.query;
+
+    const { data: onboarding, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('organization_id', organization_id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
 
     res.json({
-      count: formatted.length,
+      count: onboarding.length,
       next: null,
       previous: null,
-      results: formatted
+      results: onboarding
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -28,84 +29,71 @@ router.get('/', (req, res) => {
 });
 
 // GET single onboarding
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const onboarding = db.prepare('SELECT * FROM business_onboarding WHERE id = ?').get(req.params.id);
+    const { data: onboarding, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
     
-    if (!onboarding) {
-      return res.status(404).json({ error: 'Onboarding not found' });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Onboarding not found' });
+      }
+      throw error;
     }
-
-    // Parse JSON fields
-    const formatted = {
-      ...onboarding,
-      industries: onboarding.industries ? JSON.parse(onboarding.industries) : [],
-      business_needs: onboarding.business_needs ? JSON.parse(onboarding.business_needs) : [],
-      available_days: onboarding.available_days ? JSON.parse(onboarding.available_days) : []
-    };
     
-    res.json(formatted);
+    res.json(onboarding);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // CREATE onboarding
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const {
       business_name, website_url, currency, industries, business_needs,
       timezone, available_days, available_time_start, available_time_end,
-      event_type_label, team_member_label
+      event_type_label, team_member_label, organization_id = DEFAULT_ORG_ID
     } = req.body;
     
     if (!business_name) {
       return res.status(400).json({ error: 'Business name is required' });
     }
 
-    const insert = db.prepare(`
-      INSERT INTO business_onboarding (
-        business_name, website_url, currency, industries, business_needs,
-        timezone, available_days, available_time_start, available_time_end,
-        event_type_label, team_member_label, is_completed, current_step
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const { data: onboarding, error } = await supabase
+      .from('businesses')
+      .insert([{
+        organization_id,
+        business_name,
+        website_url: website_url || null,
+        currency: currency || 'INR',
+        industries: industries || [],
+        business_needs: business_needs || [],
+        timezone: timezone || null,
+        available_days: available_days || [],
+        available_time_start: available_time_start || null,
+        available_time_end: available_time_end || null,
+        event_type_label: event_type_label || null,
+        team_member_label: team_member_label || null,
+        is_completed: true,
+        current_step: 4
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
     
-    const result = insert.run(
-      business_name,
-      website_url || null,
-      currency || 'INR',
-      industries ? JSON.stringify(industries) : null,
-      business_needs ? JSON.stringify(business_needs) : null,
-      timezone || null,
-      available_days ? JSON.stringify(available_days) : null,
-      available_time_start || null,
-      available_time_end || null,
-      event_type_label || null,
-      team_member_label || null,
-      1, // is_completed
-      4  // current_step
-    );
-    
-    const onboarding = db.prepare('SELECT * FROM business_onboarding WHERE id = ?').get(result.lastInsertRowid);
-    
-    // Parse JSON fields
-    const formatted = {
-      ...onboarding,
-      industries: onboarding.industries ? JSON.parse(onboarding.industries) : [],
-      business_needs: onboarding.business_needs ? JSON.parse(onboarding.business_needs) : [],
-      available_days: onboarding.available_days ? JSON.parse(onboarding.available_days) : []
-    };
-    
-    res.status(201).json(formatted);
+    res.status(201).json(onboarding);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // UPDATE onboarding
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const {
       business_name, website_url, currency, industries, business_needs,
@@ -113,36 +101,33 @@ router.put('/:id', (req, res) => {
       event_type_label, team_member_label
     } = req.body;
     
-    const update = db.prepare(`
-      UPDATE business_onboarding 
-      SET business_name = ?, website_url = ?, currency = ?, industries = ?,
-          business_needs = ?, timezone = ?, available_days = ?,
-          available_time_start = ?, available_time_end = ?,
-          event_type_label = ?, team_member_label = ?,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
+    const { data: onboarding, error } = await supabase
+      .from('businesses')
+      .update({
+        business_name,
+        website_url,
+        currency,
+        industries: industries || [],
+        business_needs: business_needs || [],
+        timezone,
+        available_days: available_days || [],
+        available_time_start,
+        available_time_end,
+        event_type_label,
+        team_member_label,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
     
-    const result = update.run(
-      business_name,
-      website_url,
-      currency,
-      industries ? JSON.stringify(industries) : null,
-      business_needs ? JSON.stringify(business_needs) : null,
-      timezone,
-      available_days ? JSON.stringify(available_days) : null,
-      available_time_start,
-      available_time_end,
-      event_type_label,
-      team_member_label,
-      req.params.id
-    );
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Onboarding not found' });
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Onboarding not found' });
+      }
+      throw error;
     }
     
-    const onboarding = db.prepare('SELECT * FROM business_onboarding WHERE id = ?').get(req.params.id);
     res.json(onboarding);
   } catch (error) {
     res.status(500).json({ error: error.message });

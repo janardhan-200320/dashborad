@@ -1,56 +1,44 @@
 import express from 'express';
-import db from '../database/init.js';
+import { supabase } from '../database/supabase.js';
 
 const router = express.Router();
+const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || 'b8035af1-4c81-40d9-a4ac-143350c3d41f';
 
-// Helper to get appointment with customer and service names
-function getAppointmentWithDetails(id) {
-  return db.prepare(`
-    SELECT 
-      a.*,
-      c.name as customer_name,
-      s.name as service_name
-    FROM appointments a
-    LEFT JOIN customers c ON a.customer_id = c.id
-    LEFT JOIN services s ON a.service_id = s.id
-    WHERE a.id = ?
-  `).get(id);
-}
+// Helper to combine date and time into ISO timestamp
+const combineDateTimeToISO = (date, time) => {
+  if (!date || !time) return null;
+  return `${date}T${time}:00Z`;
+};
 
 // GET all appointments (with pagination)
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const { status, page = 1, limit = 100 } = req.query;
+    const { status, page = 1, limit = 100, organization_id = DEFAULT_ORG_ID } = req.query;
     const offset = (page - 1) * limit;
 
-    let query = `
-      SELECT 
-        a.id, a.customer_id as customer, a.service_id as service,
-        c.name as customer_name, s.name as service_name,
-        a.staff, a.date, a.time, a.status, a.notes,
-        a.meeting_platform, a.meeting_link, a.created_at, a.updated_at
-      FROM appointments a
-      LEFT JOIN customers c ON a.customer_id = c.id
-      LEFT JOIN services s ON a.service_id = s.id
-    `;
-    
-    let countQuery = 'SELECT COUNT(*) as count FROM appointments';
-    const params = [];
+    let query = supabase
+      .from('appointments')
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name, email),
+        service:services(id, name, duration_minutes, price),
+        salesperson:salespersons(id, first_name, last_name)
+      `, { count: 'exact' })
+      .eq('organization_id', organization_id)
+      .order('start_time', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
 
     if (status) {
-      query += ' WHERE a.status = ?';
-      countQuery += ' WHERE status = ?';
-      params.push(status);
+      query = query.eq('status', status);
     }
 
-    const total = db.prepare(countQuery).get(...params);
-    
-    query += ' ORDER BY a.date DESC, a.time DESC LIMIT ? OFFSET ?';
-    const appointments = db.prepare(query).all(...params, parseInt(limit), offset);
+    const { data: appointments, error, count } = await query;
+
+    if (error) throw error;
 
     res.json({
-      count: total.count,
-      next: offset + appointments.length < total.count ? `?page=${parseInt(page) + 1}&limit=${limit}` : null,
+      count: count,
+      next: offset + appointments.length < count ? `?page=${parseInt(page) + 1}&limit=${limit}` : null,
       previous: page > 1 ? `?page=${parseInt(page) - 1}&limit=${limit}` : null,
       results: appointments
     });
@@ -60,20 +48,23 @@ router.get('/', (req, res) => {
 });
 
 // GET upcoming appointments
-router.get('/upcoming', (req, res) => {
+router.get('/upcoming', async (req, res) => {
   try {
-    const appointments = db.prepare(`
-      SELECT 
-        a.id, a.customer_id as customer, a.service_id as service,
-        c.name as customer_name, s.name as service_name,
-        a.staff, a.date, a.time, a.status, a.notes,
-        a.meeting_platform, a.meeting_link, a.created_at, a.updated_at
-      FROM appointments a
-      LEFT JOIN customers c ON a.customer_id = c.id
-      LEFT JOIN services s ON a.service_id = s.id
-      WHERE a.status = 'upcoming'
-      ORDER BY a.date ASC, a.time ASC
-    `).all();
+    const { organization_id = DEFAULT_ORG_ID } = req.query;
+
+    const { data: appointments, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name, email),
+        service:services(id, name, duration_minutes, price),
+        salesperson:salespersons(id, first_name, last_name)
+      `)
+      .eq('organization_id', organization_id)
+      .eq('status', 'upcoming')
+      .order('start_time', { ascending: true });
+
+    if (error) throw error;
     
     res.json(appointments);
   } catch (error) {
@@ -82,21 +73,25 @@ router.get('/upcoming', (req, res) => {
 });
 
 // GET today's appointments
-router.get('/today', (req, res) => {
+router.get('/today', async (req, res) => {
   try {
+    const { organization_id = DEFAULT_ORG_ID } = req.query;
     const today = new Date().toISOString().split('T')[0];
-    const appointments = db.prepare(`
-      SELECT 
-        a.id, a.customer_id as customer, a.service_id as service,
-        c.name as customer_name, s.name as service_name,
-        a.staff, a.date, a.time, a.status, a.notes,
-        a.meeting_platform, a.meeting_link, a.created_at, a.updated_at
-      FROM appointments a
-      LEFT JOIN customers c ON a.customer_id = c.id
-      LEFT JOIN services s ON a.service_id = s.id
-      WHERE a.date = ?
-      ORDER BY a.time ASC
-    `).all(today);
+    
+    const { data: appointments, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name, email),
+        service:services(id, name, duration_minutes, price),
+        salesperson:salespersons(id, first_name, last_name)
+      `)
+      .eq('organization_id', organization_id)
+      .gte('start_time', `${today}T00:00:00Z`)
+      .lt('start_time', `${today}T23:59:59Z`)
+      .order('start_time', { ascending: true });
+
+    if (error) throw error;
     
     res.json(appointments);
   } catch (error) {
@@ -105,18 +100,38 @@ router.get('/today', (req, res) => {
 });
 
 // GET appointment stats
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const total = db.prepare('SELECT COUNT(*) as count FROM appointments').get();
-    const upcoming = db.prepare("SELECT COUNT(*) as count FROM appointments WHERE status = 'upcoming'").get();
-    const completed = db.prepare("SELECT COUNT(*) as count FROM appointments WHERE status = 'completed'").get();
-    const cancelled = db.prepare("SELECT COUNT(*) as count FROM appointments WHERE status = 'cancelled'").get();
+    const { organization_id = DEFAULT_ORG_ID } = req.query;
+
+    const { count: total } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organization_id);
+
+    const { count: upcoming } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organization_id)
+      .eq('status', 'upcoming');
+
+    const { count: completed } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organization_id)
+      .eq('status', 'completed');
+
+    const { count: cancelled } = await supabase
+      .from('appointments')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', organization_id)
+      .eq('status', 'cancelled');
     
     res.json({
-      total: total.count,
-      upcoming: upcoming.count,
-      completed: completed.count,
-      cancelled: cancelled.count
+      total: total || 0,
+      upcoming: upcoming || 0,
+      completed: completed || 0,
+      cancelled: cancelled || 0
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -124,12 +139,26 @@ router.get('/stats', (req, res) => {
 });
 
 // GET single appointment
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const appointment = getAppointmentWithDetails(req.params.id);
-    if (!appointment) {
-      return res.status(404).json({ error: 'Appointment not found' });
+    const { data: appointment, error } = await supabase
+      .from('appointments')
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name, email),
+        service:services(id, name, duration_minutes, price),
+        salesperson:salespersons(id, first_name, last_name)
+      `)
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Appointment not found' });
+      }
+      throw error;
     }
+
     res.json(appointment);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -137,47 +166,51 @@ router.get('/:id', (req, res) => {
 });
 
 // CREATE appointment
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const { customer_id, service_id, staff, date, time, status, notes, meeting_platform, meeting_link } = req.body;
+    const { 
+      customer_id, 
+      service_id, 
+      salesperson_id, 
+      date, 
+      time, 
+      status, 
+      notes, 
+      meeting_platform, 
+      meeting_link,
+      organization_id = DEFAULT_ORG_ID 
+    } = req.body;
     
     if (!customer_id || !date || !time) {
       return res.status(400).json({ error: 'customer_id, date, and time are required' });
     }
-    // Ensure service_id refers to an existing service; if not, set to null to avoid FK errors
-    let validServiceId = null;
-    if (service_id) {
-      const svc = db.prepare('SELECT id FROM services WHERE id = ?').get(service_id);
-      if (svc) validServiceId = service_id;
-    }
 
-    const insert = db.prepare(`
-      INSERT INTO appointments (customer_id, service_id, staff, date, time, status, notes, meeting_platform, meeting_link)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const result = insert.run(
-      customer_id,
-      validServiceId,
-      staff || null,
-      date,
-      time,
-      status || 'upcoming',
-      notes || null,
-      meeting_platform || null,
-      meeting_link || null
-    );
-
-    // Update customer's total bookings
-    db.prepare(`
-      UPDATE customers 
-      SET total_bookings = (SELECT COUNT(*) FROM appointments WHERE customer_id = ?),
-          last_appointment = ?,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(customer_id, date, customer_id);
+    const start_time = combineDateTimeToISO(date, time);
     
-    const appointment = getAppointmentWithDetails(result.lastInsertRowid);
+    const { data: appointment, error } = await supabase
+      .from('appointments')
+      .insert([{
+        organization_id,
+        customer_id,
+        service_id: service_id || null,
+        salesperson_id: salesperson_id || null,
+        start_time,
+        end_time: start_time, // You can calculate based on service duration if needed
+        status: status || 'upcoming',
+        notes: notes || null,
+        meeting_platform: meeting_platform || null,
+        meeting_link: meeting_link || null
+      }])
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name, email),
+        service:services(id, name, duration_minutes, price),
+        salesperson:salespersons(id, first_name, last_name)
+      `)
+      .single();
+
+    if (error) throw error;
+    
     res.status(201).json(appointment);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -185,35 +218,42 @@ router.post('/', (req, res) => {
 });
 
 // UPDATE appointment
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const { customer_id, service_id, staff, date, time, status, notes, meeting_platform, meeting_link } = req.body;
+    const { customer_id, service_id, salesperson_id, date, time, status, notes, meeting_platform, meeting_link } = req.body;
     
-    const update = db.prepare(`
-      UPDATE appointments 
-      SET customer_id = COALESCE(?, customer_id),
-          service_id = COALESCE(?, service_id),
-          staff = COALESCE(?, staff),
-          date = COALESCE(?, date),
-          time = COALESCE(?, time),
-          status = COALESCE(?, status),
-          notes = COALESCE(?, notes),
-          meeting_platform = COALESCE(?, meeting_platform),
-          meeting_link = COALESCE(?, meeting_link),
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
+    const updateData = {
+      updated_at: new Date().toISOString()
+    };
     
-    const result = update.run(
-      customer_id, service_id, staff, date, time, status, notes, meeting_platform, meeting_link,
-      req.params.id
-    );
+    if (customer_id !== undefined) updateData.customer_id = customer_id;
+    if (service_id !== undefined) updateData.service_id = service_id;
+    if (salesperson_id !== undefined) updateData.salesperson_id = salesperson_id;
+    if (date && time) updateData.start_time = combineDateTimeToISO(date, time);
+    if (status !== undefined) updateData.status = status;
+    if (notes !== undefined) updateData.notes = notes;
+    if (meeting_platform !== undefined) updateData.meeting_platform = meeting_platform;
+    if (meeting_link !== undefined) updateData.meeting_link = meeting_link;
     
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Appointment not found' });
+    const { data: appointment, error } = await supabase
+      .from('appointments')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name, email),
+        service:services(id, name, duration_minutes, price),
+        salesperson:salespersons(id, first_name, last_name)
+      `)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Appointment not found' });
+      }
+      throw error;
     }
     
-    const appointment = getAppointmentWithDetails(req.params.id);
     res.json(appointment);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -221,13 +261,14 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE appointment
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM appointments WHERE id = ?').run(req.params.id);
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Appointment not found' });
-    }
+    const { error } = await supabase
+      .from('appointments')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
     
     res.status(204).send();
   } catch (error) {
@@ -236,17 +277,17 @@ router.delete('/:id', (req, res) => {
 });
 
 // POST complete appointment
-router.post('/:id/complete', (req, res) => {
+router.post('/:id/complete', async (req, res) => {
   try {
-    const result = db.prepare(`
-      UPDATE appointments 
-      SET status = 'completed', updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `).run(req.params.id);
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Appointment not found' });
-    }
+    const { error } = await supabase
+      .from('appointments')
+      .update({ 
+        status: 'completed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id);
+
+    if (error) throw error;
     
     res.json({ status: 'completed' });
   } catch (error) {
@@ -255,17 +296,17 @@ router.post('/:id/complete', (req, res) => {
 });
 
 // POST cancel appointment
-router.post('/:id/cancel', (req, res) => {
+router.post('/:id/cancel', async (req, res) => {
   try {
-    const result = db.prepare(`
-      UPDATE appointments 
-      SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `).run(req.params.id);
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Appointment not found' });
-    }
+    const { error } = await supabase
+      .from('appointments')
+      .update({ 
+        status: 'cancelled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id);
+
+    if (error) throw error;
     
     res.json({ status: 'cancelled' });
   } catch (error) {

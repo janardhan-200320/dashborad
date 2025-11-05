@@ -2,7 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { initDatabase } from './database/init.js';
+// SQLite database removed - using Supabase instead
+// import { initDatabase } from './database/init.js';
 import customersRouter from './routes/customers.js';
 import servicesRouter from './routes/services.js';
 import appointmentsRouter from './routes/appointments.js';
@@ -34,8 +35,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// Initialize database
-initDatabase();
+// SQLite database initialization removed - using Supabase
+// initDatabase();
+console.log('🔧 Using Supabase database instead of SQLite');
 
 // Routes
 app.use('/api/customers', customersRouter);

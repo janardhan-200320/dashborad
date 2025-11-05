@@ -1,38 +1,33 @@
 import express from 'express';
-import db from '../database/init.js';
+import { supabase } from '../database/supabase.js';
 
 const router = express.Router();
-
-// Helper function to update timestamp
-const updateTimestamp = db.prepare(`
-  UPDATE customers SET updated_at = CURRENT_TIMESTAMP WHERE id = ?
-`);
+const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || 'b8035af1-4c81-40d9-a4ac-143350c3d41f';
 
 // GET all customers (with pagination)
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const { search, page = 1, limit = 100 } = req.query;
+    const { search, page = 1, limit = 100, organization_id = DEFAULT_ORG_ID } = req.query;
     const offset = (page - 1) * limit;
 
-    let query = 'SELECT * FROM customers';
-    let countQuery = 'SELECT COUNT(*) as count FROM customers';
-    const params = [];
+    let query = supabase
+      .from('customers')
+      .select('*', { count: 'exact' })
+      .eq('organization_id', organization_id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
 
     if (search) {
-      query += ' WHERE name LIKE ? OR email LIKE ? OR phone LIKE ?';
-      countQuery += ' WHERE name LIKE ? OR email LIKE ? OR phone LIKE ?';
-      const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam);
+      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
     }
 
-    const total = db.prepare(countQuery).get(...params);
-    
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    const customers = db.prepare(query).all(...params, parseInt(limit), offset);
+    const { data: customers, error, count } = await query;
+
+    if (error) throw error;
 
     res.json({
-      count: total.count,
-      next: offset + customers.length < total.count ? `?page=${parseInt(page) + 1}&limit=${limit}` : null,
+      count: count,
+      next: offset + customers.length < count ? `?page=${parseInt(page) + 1}&limit=${limit}` : null,
       previous: page > 1 ? `?page=${parseInt(page) - 1}&limit=${limit}` : null,
       results: customers
     });
@@ -42,12 +37,21 @@ router.get('/', (req, res) => {
 });
 
 // GET single customer
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
-    if (!customer) {
-      return res.status(404).json({ error: 'Customer not found' });
+    const { data: customer, error } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      throw error;
     }
+
     res.json(customer);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -55,50 +59,67 @@ router.get('/:id', (req, res) => {
 });
 
 // CREATE customer
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const { name, email, phone, notes } = req.body;
+    const { first_name, last_name, email, phone, notes, organization_id = DEFAULT_ORG_ID } = req.body;
     
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Name and email are required' });
+    if (!first_name || !email) {
+      return res.status(400).json({ error: 'First name and email are required' });
     }
 
-    const insert = db.prepare(`
-      INSERT INTO customers (name, email, phone, notes)
-      VALUES (?, ?, ?, ?)
-    `);
-    
-    const result = insert.run(name, email, phone || null, notes || null);
-    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
+    const { data: customer, error } = await supabase
+      .from('customers')
+      .insert([{
+        organization_id,
+        first_name,
+        last_name: last_name || '',
+        email,
+        phone: phone || null,
+        notes: notes || null,
+        is_active: true
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') { // Unique constraint violation
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+      throw error;
+    }
     
     res.status(201).json(customer);
   } catch (error) {
-    if (error.message.includes('UNIQUE constraint failed')) {
-      res.status(400).json({ error: 'Email already exists' });
-    } else {
-      res.status(500).json({ error: error.message });
-    }
+    res.status(500).json({ error: error.message });
   }
 });
 
 // UPDATE customer
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const { name, email, phone, notes } = req.body;
+    const { first_name, last_name, email, phone, notes } = req.body;
     
-    const update = db.prepare(`
-      UPDATE customers 
-      SET name = ?, email = ?, phone = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
-    
-    const result = update.run(name, email, phone || null, notes || null, req.params.id);
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Customer not found' });
+    const { data: customer, error } = await supabase
+      .from('customers')
+      .update({
+        first_name,
+        last_name: last_name || '',
+        email,
+        phone: phone || null,
+        notes: notes || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      throw error;
     }
     
-    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id);
     res.json(customer);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -106,13 +127,14 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE customer
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM customers WHERE id = ?').run(req.params.id);
-    
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Customer not found' });
-    }
+    const { error } = await supabase
+      .from('customers')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
     
     res.status(204).send();
   } catch (error) {
