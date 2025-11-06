@@ -18,7 +18,8 @@ import {
   Globe,
   Building2,
   Download,
-  ExternalLink
+  ExternalLink,
+  DollarSign
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -79,7 +80,7 @@ export default function PublicBookingPage() {
   const [, params] = useRoute('/book/:serviceId');
   const serviceId = params?.serviceId;
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [service, setService] = useState<Service | null>(null);
@@ -548,13 +549,24 @@ export default function PublicBookingPage() {
     setSelectedTime(time);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (step === 1 && selectedDate && selectedTime) {
       setStep(2);
     } else if (step === 2) {
       // Validate required dynamic fields
       const allValid = loginFields.every((f) => !f.required || (formData[f.id] && formData[f.id].trim().length > 0));
       if (!allValid) return;
+
+      // Check if this is a paid service
+      const isPaidService = callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0;
+      
+      if (isPaidService) {
+        // Go to payment step
+        setStep(3);
+        return;
+      }
+
+      // For free services, proceed directly
 
       // Persist appointment to backend
       const emailField = loginFields.find(f => f.type === 'email');
@@ -587,6 +599,52 @@ export default function PublicBookingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }).catch(() => { /* ignore for now */ });
+
+      // Generate invoice if this is a paid booking
+      if (callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0) {
+        const { createInvoice } = await import('@/lib/invoice-utils');
+        const companySettings = JSON.parse(localStorage.getItem('zervos_company') || '{}');
+        const orgSettings = JSON.parse(localStorage.getItem('zervos_organization_settings') || '{}');
+        
+        const invoice = createInvoice({
+          bookingId: payload.serviceId + '-' + Date.now(),
+          customer: {
+            name: payload.customerName,
+            email: payload.email,
+            phone: payload.phone,
+          },
+          service: {
+            name: payload.serviceName,
+            duration: callData.duration ? `${callData.duration.hours}h ${callData.duration.minutes}m` : service?.duration || '30 mins',
+            price: parseFloat(callData.priceAmount),
+          },
+          amount: parseFloat(callData.priceAmount),
+          paymentMethod: 'Online Payment',
+          currency: '₹',
+          status: 'Paid',
+          company: {
+            name: companySettings.name || orgSettings.organizationName || 'Zervos',
+            email: companySettings.email || orgSettings.email || '',
+            logo: orgSettings.logo || '',
+            brandColor: orgSettings.brandColor || '#6366f1',
+          },
+          bookingDate: payload.date,
+          bookingTime: payload.time,
+          subtotal: parseFloat(callData.priceAmount),
+          notes: 'Thank you for your booking!',
+        });
+
+        // Show toast notification
+        setTimeout(() => {
+          const toastEvent = new CustomEvent('show-toast', {
+            detail: {
+              title: 'Invoice Generated',
+              description: `Invoice ${invoice.invoiceId} created successfully`,
+            }
+          });
+          window.dispatchEvent(toastEvent);
+        }, 1000);
+      }
 
       setStep(3);
     }
@@ -739,10 +797,22 @@ export default function PublicBookingPage() {
               </div>
               <span className="font-medium hidden sm:inline">Your Details</span>
             </div>
+            {/* Show Payment step only for paid services */}
+            {callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 && (
+              <>
+                <div className="w-16 h-0.5 bg-gray-300"></div>
+                <div className={`flex items-center gap-2 ${step >= 3 ? 'text-purple-600' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
+                    {step > 3 ? <CheckCircle2 size={16} /> : '3'}
+                  </div>
+                  <span className="font-medium hidden sm:inline">Payment</span>
+                </div>
+              </>
+            )}
             <div className="w-16 h-0.5 bg-gray-300"></div>
-            <div className={`flex items-center gap-2 ${step >= 3 ? 'text-purple-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
-                {step > 3 ? <CheckCircle2 size={16} /> : '3'}
+            <div className={`flex items-center gap-2 ${step >= (callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 ? 4 : 3) ? 'text-purple-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= (callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 ? 4 : 3) ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
+                {step > (callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 ? 4 : 3) ? <CheckCircle2 size={16} /> : (callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 ? '4' : '3')}
               </div>
               <span className="font-medium hidden sm:inline">Confirmed</span>
             </div>
@@ -785,6 +855,16 @@ export default function PublicBookingPage() {
                   {getLocationIcon()}
                   <span>{getLocationText()}</span>
                 </div>
+
+                {/* Price - Show if it's a paid service */}
+                {callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 && (
+                  <div className="flex items-center justify-between text-sm bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
+                    <span className="font-semibold text-gray-900">Price:</span>
+                    <span className="text-xl font-bold text-purple-600">
+                      ₹{parseFloat(callData.priceAmount).toFixed(2)}
+                    </span>
+                  </div>
+                )}
 
                 {/* Selected Date/Time */}
                 {selectedDate && selectedTime && (
@@ -959,8 +1039,106 @@ export default function PublicBookingPage() {
                   </div>
                 )}
 
-                {/* STEP 3: Confirmation */}
-                {step === 3 && (
+                {/* STEP 3: Payment (Only for paid services) */}
+                {step === 3 && callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 && (
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                      <Button variant="ghost" size="sm" onClick={() => setStep(2)}>
+                        <ArrowLeft size={18} />
+                      </Button>
+                      <h2 className="text-2xl font-bold text-gray-900">Payment</h2>
+                    </div>
+
+                    {/* Payment Summary */}
+                    <Card className="bg-purple-50 border-purple-200">
+                      <CardContent className="p-6 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Service:</span>
+                          <span className="font-semibold">{service.name}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Duration:</span>
+                          <span className="font-semibold">{service.duration}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-4 border-t-2 border-purple-300">
+                          <span className="text-xl font-bold text-gray-900">Total Amount:</span>
+                          <span className="text-2xl font-bold text-purple-600">
+                            ₹{parseFloat(callData.priceAmount).toFixed(2)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Payment Options */}
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-gray-900">Payment Method</h3>
+                      
+                      <div className="grid gap-3">
+                        {/* Credit/Debit Card */}
+                        <div className="border-2 border-purple-200 rounded-lg p-4 bg-white hover:border-purple-400 cursor-pointer transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                              <DollarSign size={20} className="text-purple-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold">Credit / Debit Card</div>
+                              <div className="text-sm text-gray-600">Pay securely with your card</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* UPI */}
+                        <div className="border-2 border-gray-200 rounded-lg p-4 bg-white hover:border-purple-400 cursor-pointer transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                              <Phone size={20} className="text-blue-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold">UPI</div>
+                              <div className="text-sm text-gray-600">Google Pay, PhonePe, Paytm</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Net Banking */}
+                        <div className="border-2 border-gray-200 rounded-lg p-4 bg-white hover:border-purple-400 cursor-pointer transition-all">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                              <Building2 size={20} className="text-green-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold">Net Banking</div>
+                              <div className="text-sm text-gray-600">Pay via your bank account</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
+                        <p className="text-yellow-800">
+                          <strong>Note:</strong> This is a demo payment page. In production, integrate a real payment gateway like Razorpay, Stripe, or PayPal.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Proceed Button */}
+                    <div className="flex justify-between pt-4">
+                      <Button variant="outline" onClick={() => setStep(2)}>
+                        Back
+                      </Button>
+                      <Button
+                        onClick={handleContinue}
+                        className="bg-purple-600 hover:bg-purple-700"
+                        size="lg"
+                      >
+                        Complete Payment
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 4 or 3: Confirmation */}
+                {((step === 4 && callData?.price === 'paid') || (step === 3 && callData?.price !== 'paid')) && (
                   <div className="space-y-6 text-center py-8">
                     <div className="flex justify-center">
                       <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">

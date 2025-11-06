@@ -1,7 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from '@/components/ui/dialog';
 import { 
   Search, 
   Zap, 
@@ -18,7 +34,9 @@ import {
   Linkedin,
   Twitter,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  ExternalLink,
+  CheckCircle2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -40,6 +58,63 @@ type IntegrationsProps = {
 export default function Integrations({ category }: IntegrationsProps) {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Razorpay Configuration Dialog
+  const [showRazorpayDialog, setShowRazorpayDialog] = useState(false);
+  const [razorpayConfig, setRazorpayConfig] = useState({
+    keyId: '',
+    keySecret: '',
+    webhookSecret: '',
+  });
+
+  // Stripe Configuration Dialog
+  const [showStripeDialog, setShowStripeDialog] = useState(false);
+  const [stripeConfig, setStripeConfig] = useState({
+    publishableKey: '',
+    secretKey: '',
+    webhookSecret: '',
+  });
+
+  // PayPal Configuration Dialog
+  const [showPayPalDialog, setShowPayPalDialog] = useState(false);
+  const [paypalConfig, setPaypalConfig] = useState({
+    clientId: '',
+    clientSecret: '',
+    mode: 'sandbox', // sandbox or live
+  });
+
+  // Load saved configs on mount
+  useEffect(() => {
+    // Razorpay
+    const savedRazorpay = localStorage.getItem('razorpay_config');
+    if (savedRazorpay) {
+      const config = JSON.parse(savedRazorpay);
+      setRazorpayConfig(config);
+      setIntegrations(prev => prev.map(int => 
+        int.id === 'razorpay' ? { ...int, connected: true } : int
+      ));
+    }
+
+    // Stripe
+    const savedStripe = localStorage.getItem('stripe_config');
+    if (savedStripe) {
+      const config = JSON.parse(savedStripe);
+      setStripeConfig(config);
+      setIntegrations(prev => prev.map(int => 
+        int.id === 'stripe' ? { ...int, connected: true } : int
+      ));
+    }
+
+    // PayPal
+    const savedPayPal = localStorage.getItem('paypal_config');
+    if (savedPayPal) {
+      const config = JSON.parse(savedPayPal);
+      setPaypalConfig(config);
+      setIntegrations(prev => prev.map(int => 
+        int.id === 'paypal' ? { ...int, connected: true } : int
+      ));
+    }
+  }, []);
 
   const [integrations, setIntegrations] = useState<Integration[]>([
     // Most Popular
@@ -359,15 +434,183 @@ export default function Integrations({ category }: IntegrationsProps) {
   ]);
 
   const toggleConnection = (id: string) => {
+    const integration = integrations.find(i => i.id === id);
+    
+    // Special handling for payment gateways
+    if (id === 'razorpay') {
+      if (integration?.connected) {
+        setIntegrations(prev => prev.map(int => 
+          int.id === id ? { ...int, connected: false } : int
+        ));
+        localStorage.removeItem('razorpay_config');
+        toast({
+          title: "Disconnected",
+          description: "Razorpay has been disconnected successfully."
+        });
+      } else {
+        setShowRazorpayDialog(true);
+      }
+      return;
+    }
+
+    if (id === 'stripe') {
+      if (integration?.connected) {
+        setIntegrations(prev => prev.map(int => 
+          int.id === id ? { ...int, connected: false } : int
+        ));
+        localStorage.removeItem('stripe_config');
+        toast({
+          title: "Disconnected",
+          description: "Stripe has been disconnected successfully."
+        });
+      } else {
+        setShowStripeDialog(true);
+      }
+      return;
+    }
+
+    if (id === 'paypal') {
+      if (integration?.connected) {
+        setIntegrations(prev => prev.map(int => 
+          int.id === id ? { ...int, connected: false } : int
+        ));
+        localStorage.removeItem('paypal_config');
+        toast({
+          title: "Disconnected",
+          description: "PayPal has been disconnected successfully."
+        });
+      } else {
+        setShowPayPalDialog(true);
+      }
+      return;
+    }
+    
+    // Default toggle for other integrations
     setIntegrations(prev => prev.map(int => 
       int.id === id ? { ...int, connected: !int.connected } : int
     ));
     
-    const integration = integrations.find(i => i.id === id);
     if (integration) {
       toast({
         title: integration.connected ? "Disconnected" : "Connected",
         description: `${integration.name} has been ${integration.connected ? 'disconnected' : 'connected'} successfully.`
+      });
+    }
+  };
+
+  const handleRazorpaySave = async () => {
+    if (!razorpayConfig.keyId || !razorpayConfig.keySecret) {
+      toast({
+        title: "Error",
+        description: "Please enter both Key ID and Key Secret",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      localStorage.setItem('razorpay_config', JSON.stringify(razorpayConfig));
+      
+      await fetch('/api/razorpay/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(razorpayConfig),
+      });
+      
+      setIntegrations(prev => prev.map(int => 
+        int.id === 'razorpay' ? { ...int, connected: true } : int
+      ));
+
+      setShowRazorpayDialog(false);
+      
+      toast({
+        title: "Connected",
+        description: "Razorpay has been connected successfully. You can now accept payments.",
+      });
+    } catch (error) {
+      console.error('Failed to save Razorpay config:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save configuration. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleStripeSave = async () => {
+    if (!stripeConfig.publishableKey || !stripeConfig.secretKey) {
+      toast({
+        title: "Error",
+        description: "Please enter both Publishable Key and Secret Key",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      localStorage.setItem('stripe_config', JSON.stringify(stripeConfig));
+      
+      await fetch('/api/stripe/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stripeConfig),
+      });
+      
+      setIntegrations(prev => prev.map(int => 
+        int.id === 'stripe' ? { ...int, connected: true } : int
+      ));
+
+      setShowStripeDialog(false);
+      
+      toast({
+        title: "Connected",
+        description: "Stripe has been connected successfully. You can now accept payments.",
+      });
+    } catch (error) {
+      console.error('Failed to save Stripe config:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save configuration. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handlePayPalSave = async () => {
+    if (!paypalConfig.clientId || !paypalConfig.clientSecret) {
+      toast({
+        title: "Error",
+        description: "Please enter both Client ID and Client Secret",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      localStorage.setItem('paypal_config', JSON.stringify(paypalConfig));
+      
+      await fetch('/api/paypal/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paypalConfig),
+      });
+      
+      setIntegrations(prev => prev.map(int => 
+        int.id === 'paypal' ? { ...int, connected: true } : int
+      ));
+
+      setShowPayPalDialog(false);
+      
+      toast({
+        title: "Connected",
+        description: "PayPal has been connected successfully. You can now accept payments.",
+      });
+    } catch (error) {
+      console.error('Failed to save PayPal config:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save configuration. Please try again.",
+        variant: "destructive"
       });
     }
   };
@@ -546,6 +789,349 @@ export default function Integrations({ category }: IntegrationsProps) {
           )}
         </div>
       </div>
+
+      {/* ========== PAYMENT GATEWAY CONFIGURATION DIALOGS ========== */}
+      
+      {/* Razorpay Configuration Dialog */}
+      <Dialog open={showRazorpayDialog} onOpenChange={setShowRazorpayDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="text-3xl">💳</div>
+              Connect Razorpay
+            </DialogTitle>
+            <DialogDescription>
+              Enter your Razorpay API credentials to start accepting payments
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Info Banner */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={20} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-900">
+                  <p className="font-medium mb-1">Where to find your API keys?</p>
+                  <ol className="list-decimal ml-4 space-y-1 text-blue-800">
+                    <li>Log in to your Razorpay Dashboard</li>
+                    <li>Go to <strong>Settings → API Keys</strong></li>
+                    <li>Generate keys if you haven't already</li>
+                    <li>Copy and paste them below</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Key ID */}
+            <div className="space-y-2">
+              <Label htmlFor="razorpay-key-id">
+                Key ID <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="razorpay-key-id"
+                placeholder="rzp_test_XXXXXXXXXXXX"
+                value={razorpayConfig.keyId}
+                onChange={(e) => setRazorpayConfig(prev => ({ ...prev, keyId: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Your Razorpay Key ID (starts with rzp_test_ or rzp_live_)
+              </p>
+            </div>
+
+            {/* Key Secret */}
+            <div className="space-y-2">
+              <Label htmlFor="razorpay-key-secret">
+                Key Secret <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="razorpay-key-secret"
+                type="password"
+                placeholder="Enter your Key Secret"
+                value={razorpayConfig.keySecret}
+                onChange={(e) => setRazorpayConfig(prev => ({ ...prev, keySecret: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Your Razorpay Key Secret (keep this confidential)
+              </p>
+            </div>
+
+            {/* Webhook Secret (Optional) */}
+            <div className="space-y-2">
+              <Label htmlFor="razorpay-webhook-secret">
+                Webhook Secret <span className="text-gray-400">(Optional)</span>
+              </Label>
+              <Input
+                id="razorpay-webhook-secret"
+                type="password"
+                placeholder="Enter Webhook Secret"
+                value={razorpayConfig.webhookSecret}
+                onChange={(e) => setRazorpayConfig(prev => ({ ...prev, webhookSecret: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Webhook secret for payment verification (recommended for production)
+              </p>
+            </div>
+
+            {/* Help Link */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm text-gray-900">Need help?</p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Check Razorpay documentation for detailed setup guide
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open('https://razorpay.com/docs/payments/dashboard/account-settings/api-keys/', '_blank')}
+                >
+                  <ExternalLink size={14} className="mr-1" />
+                  Docs
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRazorpayDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRazorpaySave} className="bg-blue-600 hover:bg-blue-700">
+              Save & Connect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stripe Configuration Dialog */}
+      <Dialog open={showStripeDialog} onOpenChange={setShowStripeDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="text-3xl">💰</div>
+              Connect Stripe
+            </DialogTitle>
+            <DialogDescription>
+              Enter your Stripe API credentials to start accepting payments
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Info Banner */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={20} className="text-purple-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-purple-900">
+                  <p className="font-medium mb-1">Where to find your API keys?</p>
+                  <ol className="list-decimal ml-4 space-y-1 text-purple-800">
+                    <li>Log in to your Stripe Dashboard</li>
+                    <li>Go to <strong>Developers → API Keys</strong></li>
+                    <li>Find or create your API keys</li>
+                    <li>Copy and paste them below</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Publishable Key */}
+            <div className="space-y-2">
+              <Label htmlFor="stripe-publishable-key">
+                Publishable Key <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="stripe-publishable-key"
+                placeholder="pk_test_XXXXXXXXXXXX"
+                value={stripeConfig.publishableKey}
+                onChange={(e) => setStripeConfig(prev => ({ ...prev, publishableKey: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Your Stripe Publishable Key (starts with pk_test_ or pk_live_)
+              </p>
+            </div>
+
+            {/* Secret Key */}
+            <div className="space-y-2">
+              <Label htmlFor="stripe-secret-key">
+                Secret Key <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="stripe-secret-key"
+                type="password"
+                placeholder="sk_test_XXXXXXXXXXXX"
+                value={stripeConfig.secretKey}
+                onChange={(e) => setStripeConfig(prev => ({ ...prev, secretKey: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Your Stripe Secret Key (keep this confidential)
+              </p>
+            </div>
+
+            {/* Webhook Secret */}
+            <div className="space-y-2">
+              <Label htmlFor="stripe-webhook-secret">
+                Webhook Secret <span className="text-gray-400">(Optional)</span>
+              </Label>
+              <Input
+                id="stripe-webhook-secret"
+                type="password"
+                placeholder="whsec_XXXXXXXXXXXX"
+                value={stripeConfig.webhookSecret}
+                onChange={(e) => setStripeConfig(prev => ({ ...prev, webhookSecret: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Webhook signing secret for payment verification (recommended)
+              </p>
+            </div>
+
+            {/* Help Link */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm text-gray-900">Need help?</p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Check Stripe documentation for detailed setup guide
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open('https://stripe.com/docs/keys', '_blank')}
+                >
+                  <ExternalLink size={14} className="mr-1" />
+                  Docs
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStripeDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleStripeSave} className="bg-purple-600 hover:bg-purple-700">
+              Save & Connect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* PayPal Configuration Dialog */}
+      <Dialog open={showPayPalDialog} onOpenChange={setShowPayPalDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="text-3xl">🅿️</div>
+              Connect PayPal
+            </DialogTitle>
+            <DialogDescription>
+              Enter your PayPal API credentials to start accepting payments
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Info Banner */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={20} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-blue-900">
+                  <p className="font-medium mb-1">Where to find your API credentials?</p>
+                  <ol className="list-decimal ml-4 space-y-1 text-blue-800">
+                    <li>Log in to PayPal Developer Dashboard</li>
+                    <li>Go to <strong>My Apps & Credentials</strong></li>
+                    <li>Create or select an app</li>
+                    <li>Copy Client ID and Secret</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* Mode Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="paypal-mode">
+                Environment Mode <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={paypalConfig.mode}
+                onValueChange={(value) => setPaypalConfig(prev => ({ ...prev, mode: value }))}
+              >
+                <SelectTrigger id="paypal-mode">
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
+                  <SelectItem value="live">Live (Production)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">
+                Use Sandbox for testing, Live for production payments
+              </p>
+            </div>
+
+            {/* Client ID */}
+            <div className="space-y-2">
+              <Label htmlFor="paypal-client-id">
+                Client ID <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="paypal-client-id"
+                placeholder="AXXXXXXXXXXXXXXXXXXX"
+                value={paypalConfig.clientId}
+                onChange={(e) => setPaypalConfig(prev => ({ ...prev, clientId: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Your PayPal REST API Client ID
+              </p>
+            </div>
+
+            {/* Client Secret */}
+            <div className="space-y-2">
+              <Label htmlFor="paypal-client-secret">
+                Client Secret <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="paypal-client-secret"
+                type="password"
+                placeholder="Enter your Client Secret"
+                value={paypalConfig.clientSecret}
+                onChange={(e) => setPaypalConfig(prev => ({ ...prev, clientSecret: e.target.value }))}
+              />
+              <p className="text-xs text-gray-500">
+                Your PayPal REST API Secret (keep this confidential)
+              </p>
+            </div>
+
+            {/* Help Link */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm text-gray-900">Need help?</p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Check PayPal documentation for detailed setup guide
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open('https://developer.paypal.com/api/rest/', '_blank')}
+                >
+                  <ExternalLink size={14} className="mr-1" />
+                  Docs
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPayPalDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handlePayPalSave} className="bg-blue-500 hover:bg-blue-600">
+              Save & Connect
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

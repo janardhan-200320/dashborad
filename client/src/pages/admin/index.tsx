@@ -26,6 +26,7 @@ type AdminSection =
   | 'booking-page' 
   | 'login-prefs' 
   | 'salespersons'
+  | 'workflows'
   | 'workspaces' 
   | 'resources' 
   | 'locations' 

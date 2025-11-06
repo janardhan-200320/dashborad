@@ -20,6 +20,7 @@ import PublicBookingPage from "@/pages/public-booking";
 import WorkflowsPage from "@/pages/workflows";
 import AccountPage from "@/pages/Account";
 import SubscriptionPage from "@/pages/Subscription";
+import InvoicesPage from "@/pages/Invoices";
 import Workspaces from "@/pages/admin/Workspaces";
 import WorkspaceView from "@/pages/admin/WorkspaceView";
 import Resources from "@/pages/admin/Resources";
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/dashboard/admin-center/resources" component={Resources} />
       <Route path="/dashboard/workspace/:id" component={WorkspaceView} />
       <Route path="/dashboard/salespersons" component={SalespersonsPage} />
+      <Route path="/dashboard/invoices" component={InvoicesPage} />
       <Route path="/dashboard/account" component={AccountPage} />
       <Route path="/dashboard/subscription" component={SubscriptionPage} />
       <Route component={NotFound} />

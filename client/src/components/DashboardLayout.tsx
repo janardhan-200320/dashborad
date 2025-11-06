@@ -85,6 +85,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   ];
 
   const secondaryNavigation = [
+    { name: 'Invoices', icon: FileText, path: '/dashboard/invoices' },
     { name: 'Admin Center', icon: LayoutGrid, path: '/dashboard/admin-center' },
   ];
 

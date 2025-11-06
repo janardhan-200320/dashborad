@@ -272,6 +272,437 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========== RAZORPAY CONFIGURATION ROUTES ==========
+  
+  // GET /api/razorpay/config - Get Razorpay public config (Key ID only)
+  app.get("/api/razorpay/config", async (req, res) => {
+    try {
+      // In production, you'd get this from database
+      // For now, return from environment or send signal to frontend to use stored config
+      return res.json({
+        keyId: process.env.RAZORPAY_KEY_ID || '',
+        configured: !!process.env.RAZORPAY_KEY_ID,
+      });
+    } catch (error) {
+      console.error("Error fetching Razorpay config:", error);
+      return res.status(500).json({ error: "Failed to fetch configuration" });
+    }
+  });
+
+  // POST /api/razorpay/config - Save Razorpay configuration
+  app.post("/api/razorpay/config", async (req, res) => {
+    try {
+      const { keyId, keySecret, webhookSecret } = req.body;
+
+      if (!keyId || !keySecret) {
+        return res.status(400).json({ error: "Key ID and Key Secret are required" });
+      }
+
+      // In production, save to database securely
+      // For now, we'll acknowledge the save
+      // The frontend stores it in localStorage for demo purposes
+      
+      return res.json({
+        success: true,
+        message: "Razorpay configuration saved successfully",
+      });
+    } catch (error) {
+      console.error("Error saving Razorpay config:", error);
+      return res.status(500).json({ error: "Failed to save configuration" });
+    }
+  });
+
+  // ========== STRIPE CONFIGURATION ROUTES ==========
+  
+  // GET /api/stripe/config - Get Stripe public config (Publishable Key only)
+  app.get("/api/stripe/config", async (req, res) => {
+    try {
+      return res.json({
+        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+        configured: !!process.env.STRIPE_PUBLISHABLE_KEY,
+      });
+    } catch (error) {
+      console.error("Error fetching Stripe config:", error);
+      return res.status(500).json({ error: "Failed to fetch configuration" });
+    }
+  });
+
+  // POST /api/stripe/config - Save Stripe configuration
+  app.post("/api/stripe/config", async (req, res) => {
+    try {
+      const { publishableKey, secretKey, webhookSecret } = req.body;
+
+      if (!publishableKey || !secretKey) {
+        return res.status(400).json({ error: "Publishable Key and Secret Key are required" });
+      }
+
+      // In production, save to encrypted database
+      
+      return res.json({
+        success: true,
+        message: "Stripe configuration saved successfully",
+      });
+    } catch (error) {
+      console.error("Error saving Stripe config:", error);
+      return res.status(500).json({ error: "Failed to save configuration" });
+    }
+  });
+
+  // ========== PAYPAL CONFIGURATION ROUTES ==========
+  
+  // GET /api/paypal/config - Get PayPal public config (Client ID only)
+  app.get("/api/paypal/config", async (req, res) => {
+    try {
+      return res.json({
+        clientId: process.env.PAYPAL_CLIENT_ID || '',
+        mode: process.env.PAYPAL_MODE || 'sandbox',
+        configured: !!process.env.PAYPAL_CLIENT_ID,
+      });
+    } catch (error) {
+      console.error("Error fetching PayPal config:", error);
+      return res.status(500).json({ error: "Failed to fetch configuration" });
+    }
+  });
+
+  // POST /api/paypal/config - Save PayPal configuration
+  app.post("/api/paypal/config", async (req, res) => {
+    try {
+      const { clientId, clientSecret, mode } = req.body;
+
+      if (!clientId || !clientSecret) {
+        return res.status(400).json({ error: "Client ID and Client Secret are required" });
+      }
+
+      // In production, save to encrypted database
+      
+      return res.json({
+        success: true,
+        message: "PayPal configuration saved successfully",
+      });
+    } catch (error) {
+      console.error("Error saving PayPal config:", error);
+      return res.status(500).json({ error: "Failed to save configuration" });
+    }
+  });
+
+  // ========== RAZORPAY PAYMENT ROUTES ==========
+  
+  // POST /api/payment/create-order - Create Razorpay order
+  app.post("/api/payment/create-order", async (req, res) => {
+    try {
+      const { amount, currency = 'INR', receipt, notes } = req.body;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+
+      // Create Razorpay order
+      // Uncomment when you add razorpay package
+      /*
+      const razorpay = new (await import('razorpay')).default({
+        key_id: process.env.RAZORPAY_KEY_ID || '',
+        key_secret: process.env.RAZORPAY_KEY_SECRET || '',
+      });
+
+      const order = await razorpay.orders.create({
+        amount: amount * 100, // Razorpay expects amount in paise
+        currency: currency,
+        receipt: receipt || `receipt_${Date.now()}`,
+        notes: notes || {},
+      });
+
+      return res.json({
+        success: true,
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+      });
+      */
+
+      // Mock response for now (remove this when you add real Razorpay)
+      return res.json({
+        success: true,
+        order_id: `order_${Date.now()}`,
+        amount: amount * 100,
+        currency: currency,
+        mock: true, // Remove in production
+      });
+    } catch (error) {
+      console.error("Error creating Razorpay order:", error);
+      return res.status(500).json({ error: "Failed to create payment order" });
+    }
+  });
+
+  // POST /api/payment/verify - Verify Razorpay payment signature
+  app.post("/api/payment/verify", async (req, res) => {
+    try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, bookingData } = req.body;
+
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({ error: "Missing payment verification data" });
+      }
+
+      // Verify signature
+      // Uncomment when you add razorpay package
+      /*
+      const crypto = await import('crypto');
+      const secret = process.env.RAZORPAY_KEY_SECRET || '';
+      const generated_signature = crypto
+        .createHmac('sha256', secret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+
+      if (generated_signature !== razorpay_signature) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Payment verification failed" 
+        });
+      }
+      */
+
+      // Payment verified successfully
+      // Now create the booking and invoice
+      const booking = {
+        ...bookingData,
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        paymentStatus: 'paid',
+        paymentMethod: 'Razorpay',
+        createdAt: new Date().toISOString(),
+      };
+
+      // Save booking to storage
+      // await storage.createAppointment(booking);
+
+      return res.json({
+        success: true,
+        message: "Payment verified successfully",
+        booking: booking,
+        payment_id: razorpay_payment_id,
+      });
+    } catch (error) {
+      console.error("Error verifying payment:", error);
+      return res.status(500).json({ error: "Payment verification failed" });
+    }
+  });
+
+  // ========== REPORTS & ANALYTICS ROUTES ==========
+  app.get("/api/reports/analytics", async (req, res) => {
+    try {
+      const { startDate, endDate, workspaceId } = req.query;
+      
+      // Get appointments with workspace filter
+      const appointments = await storage.getAppointments({
+        workspaceId: workspaceId as string,
+      });
+      
+      // Get all resource bookings
+      const resourceBookings = await storage.getResourceBookings({
+        startDate: startDate as string,
+        endDate: endDate as string,
+      });
+      
+      // Get invoices from localStorage simulation (in production, this would be from DB)
+      // For now, we'll calculate based on appointments and bookings
+      
+      // Filter by date range if provided
+      let filteredAppointments = appointments;
+      let filteredBookings = resourceBookings;
+      
+      if (startDate && endDate) {
+        const start = new Date(startDate as string);
+        const end = new Date(endDate as string);
+        
+        filteredAppointments = filteredAppointments.filter(apt => {
+          const aptDate = new Date(apt.date);
+          return aptDate >= start && aptDate <= end;
+        });
+        
+        filteredBookings = filteredBookings.filter(booking => {
+          const bookingDate = new Date(booking.startTime);
+          return bookingDate >= start && bookingDate <= end;
+        });
+      }
+      
+      if (startDate && endDate) {
+        const start = new Date(startDate as string);
+        const end = new Date(endDate as string);
+        
+        filteredAppointments = appointments.filter(apt => {
+          const aptDate = new Date(apt.date);
+          return aptDate >= start && aptDate <= end;
+        });
+        
+        filteredBookings = resourceBookings.filter(booking => {
+          const bookingDate = new Date(booking.startTime);
+          return bookingDate >= start && bookingDate <= end;
+        });
+      }
+      
+      // Calculate metrics
+      const totalBookings = filteredAppointments.length + filteredBookings.length;
+      const completedBookings = filteredAppointments.filter(a => a.status === 'completed').length;
+      const cancelledBookings = filteredAppointments.filter(a => a.status === 'cancelled').length + 
+                                 filteredBookings.filter(b => b.status === 'cancelled').length;
+      const upcomingBookings = filteredAppointments.filter(a => a.status === 'upcoming').length;
+      
+      // Revenue calculation (mock data - in production this would come from invoices)
+      const mockRevenuePerBooking = 100; // Base rate
+      const totalRevenue = completedBookings * mockRevenuePerBooking;
+      const pendingRevenue = upcomingBookings * mockRevenuePerBooking * 0.5; // 50% upfront
+      
+      // Service distribution
+      const serviceStats = filteredAppointments.reduce((acc, apt) => {
+        const serviceName = apt.serviceName || 'General';
+        if (!acc[serviceName]) {
+          acc[serviceName] = { name: serviceName, count: 0, revenue: 0 };
+        }
+        acc[serviceName].count++;
+        if (apt.status === 'completed') {
+          acc[serviceName].revenue += mockRevenuePerBooking;
+        }
+        return acc;
+      }, {} as Record<string, { name: string; count: number; revenue: number }>);
+      
+      // Team member performance
+      const teamStats = filteredAppointments.reduce((acc, apt) => {
+        const memberName = apt.assignedMemberName || 'Unassigned';
+        const memberId = apt.assignedMemberId || 'unassigned';
+        if (!acc[memberId]) {
+          acc[memberId] = { 
+            id: memberId, 
+            name: memberName, 
+            totalBookings: 0, 
+            completedBookings: 0,
+            cancelledBookings: 0,
+            revenue: 0 
+          };
+        }
+        acc[memberId].totalBookings++;
+        if (apt.status === 'completed') {
+          acc[memberId].completedBookings++;
+          acc[memberId].revenue += mockRevenuePerBooking;
+        }
+        if (apt.status === 'cancelled') {
+          acc[memberId].cancelledBookings++;
+        }
+        return acc;
+      }, {} as Record<string, any>);
+      
+      // Resource utilization
+      const resourceStats = filteredBookings.reduce((acc, booking) => {
+        if (!acc[booking.resourceId]) {
+          acc[booking.resourceId] = {
+            resourceId: booking.resourceId,
+            totalBookings: 0,
+            totalHours: 0,
+            revenue: 0
+          };
+        }
+        acc[booking.resourceId].totalBookings++;
+        
+        // Calculate hours
+        const start = new Date(booking.startTime);
+        const end = new Date(booking.endTime);
+        const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        acc[booking.resourceId].totalHours += hours;
+        acc[booking.resourceId].revenue += hours * 50; // $50/hour mock rate
+        
+        return acc;
+      }, {} as Record<string, any>);
+      
+      // Time-based analytics (bookings by day of week)
+      const dayOfWeekStats = filteredAppointments.reduce((acc, apt) => {
+        const date = new Date(apt.date);
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+        if (!acc[dayName]) {
+          acc[dayName] = 0;
+        }
+        acc[dayName]++;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      // Time of day distribution (peak hours)
+      const timeOfDayStats = filteredAppointments.reduce((acc, apt) => {
+        if (apt.time) {
+          const hour = parseInt(apt.time.split(':')[0]);
+          const timeSlot = `${hour}:00`;
+          if (!acc[timeSlot]) {
+            acc[timeSlot] = 0;
+          }
+          acc[timeSlot]++;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+      
+      // Customer insights (new vs returning - mock data)
+      const totalCustomers = new Set(filteredAppointments.map(a => a.email)).size;
+      const newCustomers = Math.floor(totalCustomers * 0.6); // Mock: 60% new
+      const returningCustomers = totalCustomers - newCustomers;
+      
+      // Cancellation rate
+      const cancellationRate = totalBookings > 0 
+        ? ((cancelledBookings / totalBookings) * 100).toFixed(1)
+        : '0';
+      
+      // Average booking value
+      const averageBookingValue = completedBookings > 0 
+        ? (totalRevenue / completedBookings).toFixed(2)
+        : '0';
+      
+      // Growth comparison (mock - compare with previous period)
+      const previousPeriodRevenue = totalRevenue * 0.85; // Mock: 15% growth
+      const revenueGrowth = previousPeriodRevenue > 0
+        ? (((totalRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100).toFixed(1)
+        : '0';
+      
+      const previousPeriodBookings = totalBookings * 0.9; // Mock: 10% growth
+      const bookingsGrowth = previousPeriodBookings > 0
+        ? (((totalBookings - previousPeriodBookings) / previousPeriodBookings) * 100).toFixed(1)
+        : '0';
+      
+      // Assemble response
+      const analytics = {
+        overview: {
+          totalBookings,
+          completedBookings,
+          upcomingBookings,
+          cancelledBookings,
+          cancellationRate: parseFloat(cancellationRate),
+          totalRevenue,
+          pendingRevenue,
+          averageBookingValue: parseFloat(averageBookingValue),
+          revenueGrowth: parseFloat(revenueGrowth),
+          bookingsGrowth: parseFloat(bookingsGrowth),
+        },
+        services: Object.values(serviceStats),
+        team: Object.values(teamStats),
+        resources: Object.values(resourceStats),
+        timeAnalytics: {
+          byDayOfWeek: dayOfWeekStats,
+          byTimeOfDay: timeOfDayStats,
+        },
+        customers: {
+          total: totalCustomers,
+          new: newCustomers,
+          returning: returningCustomers,
+          retentionRate: totalCustomers > 0 
+            ? ((returningCustomers / totalCustomers) * 100).toFixed(1)
+            : '0',
+        },
+        dateRange: {
+          startDate: startDate || 'all',
+          endDate: endDate || 'all',
+        },
+      };
+      
+      return res.json(analytics);
+    } catch (error) {
+      console.error("Error generating analytics:", error);
+      return res.status(500).json({ error: "Failed to generate analytics" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

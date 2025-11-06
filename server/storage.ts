@@ -293,7 +293,7 @@ export class MemStorage implements IStorage {
     return apt;
   }
 
-  async getAppointments(filters?: { assignedMemberId?: string; serviceId?: string; status?: string }): Promise<Appointment[]> {
+  async getAppointments(filters?: { assignedMemberId?: string; serviceId?: string; status?: string; workspaceId?: string }): Promise<Appointment[]> {
     let list = Array.from(this.appointments.values());
     if (filters?.assignedMemberId) {
       list = list.filter(a => a.assignedMemberId === filters.assignedMemberId);
@@ -303,6 +303,9 @@ export class MemStorage implements IStorage {
     }
     if (filters?.status) {
       list = list.filter(a => a.status === (filters.status as any));
+    }
+    if (filters?.workspaceId && filters.workspaceId !== 'all') {
+      list = list.filter(a => a.workspaceId === filters.workspaceId);
     }
     return list;
   }
@@ -320,6 +323,7 @@ export interface Appointment {
   serviceId?: string;
   assignedMemberId?: string;
   assignedMemberName?: string;
+  workspaceId?: string; // Add workspace support
   date: string; // YYYY-MM-DD
   time: string; // e.g., 10:30 AM
   status: 'upcoming' | 'completed' | 'cancelled';

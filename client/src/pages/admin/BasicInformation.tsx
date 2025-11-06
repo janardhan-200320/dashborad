@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Edit, Building2, Info } from 'lucide-react';
@@ -21,6 +22,28 @@ export default function BasicInformation() {
     timeFormat: '12 Hours',
     zohoBranding: true,
     logo: '',
+    // Invoice-related fields
+    gstNumber: '',
+    address: {
+      street: '',
+      city: '',
+      state: '',
+      pincode: '',
+      country: 'India',
+    },
+    brandColor: '#6366f1',
+    website: '',
+    taxDetails: {
+      cgst: 2.5,
+      sgst: 2.5,
+      igst: 0,
+    },
+    bankDetails: {
+      accountName: '',
+      accountNumber: '',
+      ifscCode: '',
+      bankName: '',
+    },
   });
 
   const [editData, setEditData] = useState({ ...orgData });
@@ -29,8 +52,34 @@ export default function BasicInformation() {
     const saved = localStorage.getItem('zervos_organization');
     if (saved) {
       const data = JSON.parse(saved);
-      setOrgData(data);
-      setEditData(data);
+      // Merge with defaults to ensure all fields exist
+      const mergedData = {
+        ...orgData,
+        ...data,
+        address: {
+          street: '',
+          city: '',
+          state: '',
+          pincode: '',
+          country: 'India',
+          ...data.address,
+        },
+        taxDetails: {
+          cgst: 2.5,
+          sgst: 2.5,
+          igst: 0,
+          ...data.taxDetails,
+        },
+        bankDetails: {
+          accountName: '',
+          accountNumber: '',
+          ifscCode: '',
+          bankName: '',
+          ...data.bankDetails,
+        },
+      };
+      setOrgData(mergedData);
+      setEditData(mergedData);
     }
   }, []);
 
@@ -117,25 +166,91 @@ export default function BasicInformation() {
               {orgData.zohoBranding ? 'Enabled' : 'Disabled'}
             </Badge>
           </div>
+        </div>
+      </div>
+
+      {/* Invoice & Tax Information */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-6">Invoice & Tax Information</h3>
+        <div className="grid grid-cols-2 gap-x-12 gap-y-6">
+          <div>
+            <p className="text-sm text-gray-500 mb-1">GST Number</p>
+            <p className="text-base font-medium text-gray-900">{orgData.gstNumber || '-'}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">Website</p>
+            <p className="text-base font-medium text-gray-900">{orgData.website || '-'}</p>
+          </div>
           <div className="col-span-2">
-            <p className="text-sm text-gray-500 mb-2">Custom Fields For In-App Booking</p>
-            <Button variant="outline" size="sm">
-              Hide
-            </Button>
+            <p className="text-sm text-gray-500 mb-1">Business Address</p>
+            <p className="text-base font-medium text-gray-900">
+              {orgData.address?.street || '-'}
+              {orgData.address?.street && <br />}
+              {[orgData.address?.city, orgData.address?.state, orgData.address?.pincode].filter(Boolean).join(', ')}
+              {orgData.address?.city && <br />}
+              {orgData.address?.country || 'India'}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">CGST</p>
+            <p className="text-base font-medium text-gray-900">{orgData.taxDetails?.cgst || 2.5}%</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">SGST</p>
+            <p className="text-base font-medium text-gray-900">{orgData.taxDetails?.sgst || 2.5}%</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">IGST</p>
+            <p className="text-base font-medium text-gray-900">{orgData.taxDetails?.igst || 0}%</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">Brand Color</p>
+            <div className="flex items-center gap-2">
+              <div 
+                className="w-8 h-8 rounded border border-gray-300" 
+                style={{ backgroundColor: orgData.brandColor }}
+              />
+              <p className="text-base font-medium text-gray-900">{orgData.brandColor}</p>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Bank Details */}
+      {(orgData.bankDetails?.accountNumber || orgData.bankDetails?.ifscCode) && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">Bank Details</h3>
+          <div className="grid grid-cols-2 gap-x-12 gap-y-6">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Account Name</p>
+              <p className="text-base font-medium text-gray-900">{orgData.bankDetails?.accountName || '-'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Account Number</p>
+              <p className="text-base font-medium text-gray-900 font-mono">{orgData.bankDetails?.accountNumber || '-'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-1">IFSC Code</p>
+              <p className="text-base font-medium text-gray-900">{orgData.bankDetails?.ifscCode || '-'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-1">Bank Name</p>
+              <p className="text-base font-medium text-gray-900">{orgData.bankDetails?.bankName || '-'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Basic Information</DialogTitle>
             <DialogDescription>
-              Update your organization's basic information and settings
+              Update your organization's basic information, invoice settings, and tax details
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-6 py-4">
             <div className="flex flex-col items-center gap-4 mb-4">
               <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center border-2 border-gray-200">
                 {editData.logo ? (
@@ -249,6 +364,201 @@ export default function BasicInformation() {
                     <SelectItem value="24 Hours">24 Hours</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Invoice & Tax Section */}
+            <div className="border-t pt-6 mt-6">
+              <h3 className="text-lg font-semibold mb-4">Invoice & Tax Information</h3>
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="space-y-2">
+                  <Label>GST Number</Label>
+                  <Input
+                    value={editData.gstNumber}
+                    onChange={(e) => setEditData({ ...editData, gstNumber: e.target.value })}
+                    placeholder="22AAAAA0000A1Z5"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Website</Label>
+                  <Input
+                    value={editData.website}
+                    onChange={(e) => setEditData({ ...editData, website: e.target.value })}
+                    placeholder="https://yourbusiness.com"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <Label>Street Address</Label>
+                <Input
+                  value={editData.address.street}
+                  onChange={(e) => setEditData({ 
+                    ...editData, 
+                    address: { ...editData.address, street: e.target.value }
+                  })}
+                  placeholder="Door No., Street, Landmark"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="space-y-2">
+                  <Label>City</Label>
+                  <Input
+                    value={editData.address.city}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      address: { ...editData.address, city: e.target.value }
+                    })}
+                    placeholder="Bangalore"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>State</Label>
+                  <Input
+                    value={editData.address.state}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      address: { ...editData.address, state: e.target.value }
+                    })}
+                    placeholder="Karnataka"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="space-y-2">
+                  <Label>Pincode</Label>
+                  <Input
+                    value={editData.address.pincode}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      address: { ...editData.address, pincode: e.target.value }
+                    })}
+                    placeholder="560001"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Country</Label>
+                  <Input
+                    value={editData.address.country}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      address: { ...editData.address, country: e.target.value }
+                    })}
+                    placeholder="India"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <Label>Brand Color (for invoices)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="color"
+                    value={editData.brandColor}
+                    onChange={(e) => setEditData({ ...editData, brandColor: e.target.value })}
+                    className="w-20 h-10 p-1 cursor-pointer"
+                  />
+                  <Input
+                    value={editData.brandColor}
+                    onChange={(e) => setEditData({ ...editData, brandColor: e.target.value })}
+                    placeholder="#6366f1"
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+
+              <h4 className="font-semibold mb-3">Tax Rates</h4>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="space-y-2">
+                  <Label>CGST (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={editData.taxDetails.cgst}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      taxDetails: { ...editData.taxDetails, cgst: parseFloat(e.target.value) || 0 }
+                    })}
+                    placeholder="2.5"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>SGST (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={editData.taxDetails.sgst}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      taxDetails: { ...editData.taxDetails, sgst: parseFloat(e.target.value) || 0 }
+                    })}
+                    placeholder="2.5"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>IGST (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={editData.taxDetails.igst}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      taxDetails: { ...editData.taxDetails, igst: parseFloat(e.target.value) || 0 }
+                    })}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <h4 className="font-semibold mb-3">Bank Details (Optional)</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Account Name</Label>
+                  <Input
+                    value={editData.bankDetails.accountName}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      bankDetails: { ...editData.bankDetails, accountName: e.target.value }
+                    })}
+                    placeholder="Business Name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Account Number</Label>
+                  <Input
+                    value={editData.bankDetails.accountNumber}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      bankDetails: { ...editData.bankDetails, accountNumber: e.target.value }
+                    })}
+                    placeholder="1234567890"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>IFSC Code</Label>
+                  <Input
+                    value={editData.bankDetails.ifscCode}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      bankDetails: { ...editData.bankDetails, ifscCode: e.target.value }
+                    })}
+                    placeholder="SBIN0001234"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Bank Name</Label>
+                  <Input
+                    value={editData.bankDetails.bankName}
+                    onChange={(e) => setEditData({ 
+                      ...editData, 
+                      bankDetails: { ...editData.bankDetails, bankName: e.target.value }
+                    })}
+                    placeholder="State Bank of India"
+                  />
+                </div>
               </div>
             </div>
           </div>
