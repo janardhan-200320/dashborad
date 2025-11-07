@@ -457,6 +457,14 @@ export default function PublicBookingPage() {
     return true;
   };
 
+  // Helper to format date to YYYY-MM-DD without timezone issues
+  const formatDateISO = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const parseTimeToDate = (date: Date, time12: string) => {
     // time like '09:30 AM'
     const [timePart, meridian] = time12.split(' ');
@@ -484,7 +492,11 @@ export default function PublicBookingPage() {
     };
 
     // Special hours intersect: if exists for this date, the slot must be within special hours
-    const dateISO = date.toISOString().split('T')[0];
+    // Use local date format to avoid timezone issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateISO = `${year}-${month}-${day}`;
     const special = specialHours.find(sh => sh.date === dateISO);
     const allowedBySpecial = special ? within(special.startTime, special.endTime, true) : true;
 
@@ -492,7 +504,10 @@ export default function PublicBookingPage() {
     let allowedByCall = true;
     if (callData?.availability) {
       const cfg = callData.availability[dayName];
-      if (!cfg || cfg.enabled === false) return false; // if call disables day, slot is not allowed
+      if (!cfg || cfg.enabled === false) {
+        console.log(`🚫 Slot ${slot} on ${dayName} blocked by call availability`, cfg);
+        return false; // if call disables day, slot is not allowed
+      }
       allowedByCall = within(cfg.start, cfg.end, cfg.enabled !== false);
     }
 
@@ -500,7 +515,10 @@ export default function PublicBookingPage() {
     let allowedByOrg = true;
     if (!callData?.availability) {
       const org = orgSchedule[dayName];
-      if (!org || org.enabled === false) return false;
+      if (!org || org.enabled === false) {
+        console.log(`🚫 Slot ${slot} on ${dayName} blocked by org schedule`, org);
+        return false;
+      }
       allowedByOrg = within(org.start, org.end, org.enabled);
     }
 
@@ -508,11 +526,18 @@ export default function PublicBookingPage() {
     let allowedByMember = true;
     if (memberSchedule) {
       const m = memberSchedule[dayName];
-      if (!m || m.enabled === false) return false;
+      if (!m || m.enabled === false) {
+        console.log(`🚫 Slot ${slot} on ${dayName} blocked by member schedule`, m);
+        return false;
+      }
       allowedByMember = within(m.start, m.end, m.enabled);
     }
 
-    return allowedBySpecial && allowedByCall && allowedByOrg && allowedByMember;
+    const result = allowedBySpecial && allowedByCall && allowedByOrg && allowedByMember;
+    if (!result) {
+      console.log(`🚫 Slot ${slot} on ${dayName} (${dateISO}) blocked - special: ${allowedBySpecial}, call: ${allowedByCall}, org: ${allowedByOrg}, member: ${allowedByMember}`);
+    }
+    return result;
   };
 
   const passesMinNotice = (date: Date, slot: string) => {
@@ -581,7 +606,7 @@ export default function PublicBookingPage() {
         serviceId: callData?.id || serviceId || '',
         assignedMemberId: assignedMemberId || '',
         assignedMemberName: service?.hostName || '',
-        date: selectedDate ? selectedDate.toISOString().split('T')[0] : '',
+        date: selectedDate ? formatDateISO(selectedDate) : '',
         time: selectedTime || '',
         status: 'upcoming' as const,
         notes: (() => {
@@ -658,7 +683,7 @@ export default function PublicBookingPage() {
     if (!selectedDate || !selectedTime || !service) return;
     
     const { start, end} = createEventDate(
-      selectedDate.toISOString().split('T')[0],
+      formatDateISO(selectedDate),
       selectedTime,
       service?.durationMinutes || 30 // Use actual duration
     );
@@ -679,7 +704,7 @@ export default function PublicBookingPage() {
     if (!selectedDate || !selectedTime || !service) return;
     
     const { start, end } = createEventDate(
-      selectedDate.toISOString().split('T')[0],
+      formatDateISO(selectedDate),
       selectedTime,
       service?.durationMinutes || 30
     );
@@ -700,7 +725,7 @@ export default function PublicBookingPage() {
     if (!selectedDate || !selectedTime || !service) return;
     
     const { start, end } = createEventDate(
-      selectedDate.toISOString().split('T')[0],
+      formatDateISO(selectedDate),
       selectedTime,
       service?.durationMinutes || 30
     );
