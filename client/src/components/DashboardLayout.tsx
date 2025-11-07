@@ -13,6 +13,7 @@ import {
   Bell,
   Sparkles,
   ShieldCheck,
+  UserPlus,
 } from 'lucide-react';
 import ProfileDropdown from './ProfileDropdown';
 import WorkspaceSelector from './WorkspaceSelector';
@@ -85,6 +86,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   ];
 
   const secondaryNavigation = [
+    { name: 'Leads', icon: UserPlus, path: '/dashboard/leads' },
     { name: 'Invoices', icon: FileText, path: '/dashboard/invoices' },
     { name: 'Admin Center', icon: LayoutGrid, path: '/dashboard/admin-center' },
   ];
