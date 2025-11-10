@@ -207,7 +207,53 @@ export default function PublicBookingPage() {
         return keys;
       };
 
-      // 1) Find the sales call by id across all workspace-scoped keys (and global fallback)
+      // 1) First check if it's a service from the Services page
+      const serviceKeys = [
+        ...getKeysByPrefix('zervos_services_'),
+      ];
+
+      let foundService: any | null = null;
+      for (const key of serviceKeys) {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) {
+            const svc = arr.find((s: any) => s?.id === serviceId && s?.isEnabled);
+            if (svc) {
+              foundService = svc;
+              break;
+            }
+          }
+        } catch {}
+      }
+
+      // If found a service from Services page, use it
+      if (foundService) {
+        // Parse duration to extract minutes
+        const durationMatch = foundService.duration.match(/(\d+)/);
+        const durationMinutes = durationMatch ? parseInt(durationMatch[0]) : 30;
+        
+        setService({
+          id: foundService.id,
+          name: foundService.name,
+          description: foundService.description || 'Book your appointment for this service',
+          duration: foundService.duration,
+          durationMinutes: durationMinutes,
+          locationType: 'in-person',
+          hostName: 'Service Provider',
+          color: 'from-purple-500 to-pink-500'
+        });
+        // Store service data with price and currency for booking confirmation
+        setCallData({
+          ...foundService,
+          price: foundService.price,
+          currency: foundService.currency
+        });
+        return;
+      }
+
+      // 2) Otherwise, find the sales call by id across all workspace-scoped keys
       const callKeys = [
         ...getKeysByPrefix('zervos_sales_calls::'),
         'zervos_sales_calls'
@@ -927,12 +973,24 @@ export default function PublicBookingPage() {
                   <span>{getLocationText()}</span>
                 </div>
 
-                {/* Price - Show if it's a paid service */}
-                {callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0 && (
+                {/* Price - Show if it's a paid service or from Services page */}
+                {((callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0) || 
+                  (callData?.price && callData?.currency)) && (
                   <div className="flex items-center justify-between text-sm bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
                     <span className="font-semibold text-gray-900">Price:</span>
                     <span className="text-xl font-bold text-purple-600">
-                      ₹{parseFloat(callData.priceAmount).toFixed(2)}
+                      {callData?.currency === 'INR' && '₹'}
+                      {callData?.currency === 'USD' && '$'}
+                      {callData?.currency === 'EUR' && '€'}
+                      {callData?.currency === 'GBP' && '£'}
+                      {callData?.currency === 'JPY' && '¥'}
+                      {callData?.currency === 'AUD' && 'A$'}
+                      {callData?.currency === 'CAD' && 'C$'}
+                      {callData?.currency === 'CHF' && 'CHF '}
+                      {callData?.currency === 'CNY' && '¥'}
+                      {callData?.currency === 'AED' && 'د.إ'}
+                      {!callData?.currency && '₹'}
+                      {callData?.price || callData?.priceAmount}
                     </span>
                   </div>
                 )}

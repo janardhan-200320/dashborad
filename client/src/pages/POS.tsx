@@ -85,7 +85,7 @@ const SAMPLE_APPOINTMENTS = [
 
 export default function POSPage() {
   const [, setLocation] = useLocation();
-  const [products, setProducts] = useState<Product[]>(SAMPLE_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     // Load transactions from localStorage on mount
     const saved = localStorage.getItem('pos_transactions');
@@ -118,6 +118,80 @@ export default function POSPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const printableRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
+
+  // Load products and services from localStorage
+  useEffect(() => {
+    loadProductsAndServices();
+    
+    // Listen for updates
+    const handleProductsUpdate = () => loadProductsAndServices();
+    const handleServicesUpdate = () => loadProductsAndServices();
+    
+    window.addEventListener('products-updated', handleProductsUpdate);
+    window.addEventListener('services-updated', handleServicesUpdate);
+    
+    return () => {
+      window.removeEventListener('products-updated', handleProductsUpdate);
+      window.removeEventListener('services-updated', handleServicesUpdate);
+    };
+  }, []);
+
+  const loadProductsAndServices = () => {
+    try {
+      const currentWorkspace = localStorage.getItem('zervos_current_workspace') || 'default';
+      const allItems: Product[] = [];
+
+      // Load products from Products page
+      const productsKey = `zervos_products_${currentWorkspace}`;
+      const productsRaw = localStorage.getItem(productsKey);
+      if (productsRaw) {
+        const productsList = JSON.parse(productsRaw);
+        if (Array.isArray(productsList)) {
+          productsList.forEach((prod: any) => {
+            if (prod.isEnabled) {
+              allItems.push({
+                id: prod.id,
+                name: prod.name,
+                price: Math.round(parseFloat(prod.price) * 100), // Convert to cents
+                description: prod.description,
+                category: prod.category,
+              });
+            }
+          });
+        }
+      }
+
+      // Load services from Services page
+      const servicesKey = `zervos_services_${currentWorkspace}`;
+      const servicesRaw = localStorage.getItem(servicesKey);
+      if (servicesRaw) {
+        const servicesList = JSON.parse(servicesRaw);
+        if (Array.isArray(servicesList)) {
+          servicesList.forEach((svc: any) => {
+            if (svc.isEnabled) {
+              allItems.push({
+                id: svc.id,
+                name: svc.name,
+                price: Math.round(parseFloat(svc.price) * 100), // Convert to cents
+                description: `${svc.description} (${svc.duration})`,
+                category: svc.category,
+              });
+            }
+          });
+        }
+      }
+
+      // Fallback to sample data if nothing loaded
+      if (allItems.length === 0) {
+        setProducts(SAMPLE_PRODUCTS);
+      } else {
+        setProducts(allItems);
+      }
+    } catch (error) {
+      console.error('Error loading products and services:', error);
+      setProducts(SAMPLE_PRODUCTS);
+    }
+  };
 
   // Listen for storage changes (when new transaction is added from POS Register)
   useEffect(() => {

@@ -16,6 +16,9 @@ import {
   UserPlus,
   ShoppingCart,
   Clock,
+  Package,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import NotificationDropdown from './NotificationDropdown';
 import ProfileDropdown from './ProfileDropdown';
@@ -46,6 +49,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   const [hoveredNav, setHoveredNav] = useState<string | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [orgLogo, setOrgLogo] = useState<string>('');
+  const [itemsExpanded, setItemsExpanded] = useState(false);
   const { selectedWorkspace } = useWorkspace();
 
   useEffect(() => {
@@ -91,6 +95,11 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
     { name: 'Booking Pages', icon: FileText, path: '/dashboard/booking-pages' },
   ];
 
+  const itemsSubNavigation = [
+    { name: 'Services', icon: Sparkles, path: '/dashboard/services' },
+    { name: 'Products', icon: Package, path: '/dashboard/products' },
+  ];
+
   const secondaryNavigation = [
     { name: 'Leads', icon: UserPlus, path: '/dashboard/leads' },
     { name: 'Invoices', icon: FileText, path: '/dashboard/invoices' },
@@ -104,11 +113,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
 
   const renderNavItems = (expanded: boolean) => (
     <LayoutGroup>
-      {[...navigation, { divider: true }, ...secondaryNavigation].map((item) => {
-        if ('divider' in item) {
-          return <div key="divider" className="mx-4 my-4 h-px bg-slate-700" />;
-        }
-
+      {navigation.map((item) => {
         const active = isActive(item.path);
 
         return (
@@ -140,7 +145,129 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
               )}
 
               <AnimatePresence>
-        {hoveredNav === item.path && (
+                {hoveredNav === item.path && (
+                  <motion.span
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.2 }}
+                    className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-slate-700 px-3 py-1 text-xs font-semibold text-white shadow-lg ring-1 ring-slate-600"
+                  >
+                    {item.name}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </a>
+          </Link>
+        );
+      })}
+
+      {/* Items Section with Sub-navigation */}
+      <div key="items-section">
+        <motion.button
+          onClick={() => setItemsExpanded(!itemsExpanded)}
+          className={`relative w-full flex items-center ${
+            expanded ? 'gap-3 px-4 py-3' : 'justify-center px-2 py-3'
+          } text-sm font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 rounded-xl`}
+        >
+          <motion.span className="relative z-10 flex items-center justify-center">
+            <Package size={20} className="text-slate-300" />
+          </motion.span>
+
+          {expanded && (
+            <>
+              <span className="relative z-10 font-medium text-slate-200 flex-1 text-left">Items</span>
+              <motion.span
+                animate={{ rotate: itemsExpanded ? 180 : 0 }}
+                transition={{ duration: 0.2 }}
+                className="relative z-10"
+              >
+                <ChevronDown size={16} className="text-slate-400" />
+              </motion.span>
+            </>
+          )}
+        </motion.button>
+
+        <AnimatePresence>
+          {itemsExpanded && expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              {itemsSubNavigation.map((subItem) => {
+                const subActive = isActive(subItem.path);
+                return (
+                  <Link key={subItem.path} href={subItem.path}>
+                    <a
+                      className={`relative flex items-center gap-3 pl-12 pr-4 py-2.5 text-sm font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 rounded-xl`}
+                    >
+                      <motion.span
+                        className="relative z-10 flex items-center justify-center"
+                        initial={false}
+                        animate={{ scale: subActive ? 1.05 : 1 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                      >
+                        <subItem.icon size={18} className={subActive ? 'text-white' : 'text-slate-400'} />
+                      </motion.span>
+
+                      <span className={`relative z-10 font-medium ${subActive ? 'text-white' : 'text-slate-300'}`}>
+                        {subItem.name}
+                      </span>
+
+                      {subActive && (
+                        <motion.span
+                          layoutId="nav-active"
+                          className="absolute inset-0 rounded-xl bg-slate-700/60 shadow-lg"
+                          transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                        />
+                      )}
+                    </a>
+                  </Link>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <div key="divider" className="mx-4 my-4 h-px bg-slate-700" />
+
+      {secondaryNavigation.map((item) => {
+        const active = isActive(item.path);
+
+        return (
+          <Link key={item.path} href={item.path}>
+            <a
+              onMouseEnter={() => !expanded && setHoveredNav(item.path)}
+              onMouseLeave={() => setHoveredNav(prev => (prev === item.path ? null : prev))}
+              className={`relative flex items-center ${
+                expanded ? 'gap-3 px-4 py-3' : 'justify-center px-2 py-3'
+              } text-sm font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 rounded-xl overflow-visible`}
+            >
+              <motion.span
+                className="relative z-10 flex items-center justify-center"
+                initial={false}
+                animate={{ scale: active ? 1.05 : 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              >
+                <item.icon size={20} className={active ? 'text-white' : 'text-slate-300'} />
+              </motion.span>
+
+              {expanded && <span className={`relative z-10 font-medium ${active ? 'text-white' : 'text-slate-200'}`}>{item.name}</span>}
+
+              {active && (
+                <motion.span
+                  layoutId="nav-active"
+                  className="absolute inset-0 rounded-xl bg-slate-700 shadow-lg"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+
+              <AnimatePresence>
+                {hoveredNav === item.path && (
                   <motion.span
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -205,11 +332,13 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
         </div>
 
         <WorkspaceSelector sidebarOpen={expanded} />
+      </div>
 
-        <div className="mt-4 flex-1 space-y-1 overflow-y-auto pb-6">
+      {/* Scrollable Navigation Area */}
+      <div className="flex-1 overflow-y-auto px-4 pb-6">
+        <div className="space-y-1">
           {renderNavItems(expanded)}
         </div>
-
       </div>
     </motion.aside>
   );
@@ -262,10 +391,15 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
               </motion.button>
             </div>
 
-            <WorkspaceSelector sidebarOpen={true} />
+            <div className="px-4">
+              <WorkspaceSelector sidebarOpen={true} />
+            </div>
 
-            <div className="mt-2 flex-1 space-y-1 overflow-y-auto px-4 pb-6">
-              {renderNavItems(true)}
+            {/* Scrollable Navigation Area for Mobile */}
+            <div className="flex-1 overflow-y-auto px-4 pb-6 mt-2">
+              <div className="space-y-1">
+                {renderNavItems(true)}
+              </div>
             </div>
 
           </motion.aside>

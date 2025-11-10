@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Plus, Search, Filter, CalendarX, DollarSign, CreditCard, Smartphone, Banknote, Edit2, Trash2, Clock, CheckCircle2, XCircle, MoreVertical, Pause, RefreshCw, Eye, Mail, Phone, User, MapPin } from 'lucide-react';
+import { Calendar, Plus, Minus, Search, Filter, CalendarX, DollarSign, CreditCard, Smartphone, Banknote, Edit2, Trash2, Clock, CheckCircle2, XCircle, MoreVertical, Pause, RefreshCw, Eye, Mail, Phone, User, MapPin } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,7 +66,10 @@ export default function AppointmentsNew() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
+  const [services, setServices] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [isCustomService, setIsCustomService] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState<{id: string; name: string; price: string; quantity: number}[]>([]);
   
   const [newAppointment, setNewAppointment] = useState({
     customerName: '',
@@ -126,6 +129,16 @@ export default function AppointmentsNew() {
       console.error('Error loading team members:', error);
     }
 
+    // Load services and products
+    loadServices();
+    loadProducts();
+
+    // Listen for services and products updates
+    const handleServicesUpdate = () => loadServices();
+    const handleProductsUpdate = () => loadProducts();
+    window.addEventListener('services-updated', handleServicesUpdate);
+    window.addEventListener('products-updated', handleProductsUpdate);
+
     // Prefer backend appointments if available, fallback to localStorage
     fetch('/api/appointments')
       .then(res => (res && res.ok ? res.json() : Promise.reject()))
@@ -140,7 +153,83 @@ export default function AppointmentsNew() {
           }
         } catch {}
       });
+
+    return () => {
+      window.removeEventListener('services-updated', handleServicesUpdate);
+      window.removeEventListener('products-updated', handleProductsUpdate);
+    };
   }, []);
+
+  const loadServices = () => {
+    try {
+      const currentWorkspace = localStorage.getItem('currentWorkspace') || 'default';
+      const stored = localStorage.getItem(`zervos_services_${currentWorkspace}`);
+      if (stored) {
+        const parsedServices = JSON.parse(stored);
+        // Filter only enabled services
+        const enabledServices = parsedServices.filter((s: any) => s.isEnabled);
+        setServices(enabledServices);
+      }
+    } catch (error) {
+      console.error('Error loading services:', error);
+    }
+  };
+
+  const loadProducts = () => {
+    try {
+      const currentWorkspace = localStorage.getItem('currentWorkspace') || 'default';
+      const stored = localStorage.getItem(`zervos_products_${currentWorkspace}`);
+      if (stored) {
+        const parsedProducts = JSON.parse(stored);
+        // Filter only enabled products
+        const enabledProducts = parsedProducts.filter((p: any) => p.isEnabled);
+        setProducts(enabledProducts);
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+    }
+  };
+
+  const addProductToAppointment = (productId: string) => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    const existing = selectedProducts.find(p => p.id === productId);
+    if (existing) {
+      setSelectedProducts(selectedProducts.map(p => 
+        p.id === productId ? { ...p, quantity: p.quantity + 1 } : p
+      ));
+    } else {
+      setSelectedProducts([...selectedProducts, {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: 1
+      }]);
+    }
+  };
+
+  const removeProductFromAppointment = (productId: string) => {
+    setSelectedProducts(selectedProducts.filter(p => p.id !== productId));
+  };
+
+  const updateProductQuantity = (productId: string, quantity: number) => {
+    if (quantity <= 0) {
+      removeProductFromAppointment(productId);
+    } else {
+      setSelectedProducts(selectedProducts.map(p => 
+        p.id === productId ? { ...p, quantity } : p
+      ));
+    }
+  };
+
+  const calculateTotalWithProducts = () => {
+    const serviceAmount = parseFloat(newAppointment.amount) || 0;
+    const productsTotal = selectedProducts.reduce((sum, p) => 
+      sum + (parseFloat(p.price) * p.quantity), 0
+    );
+    return serviceAmount + productsTotal;
+  };
 
   const handleCreateAppointment = () => {
     const finalServiceName = isCustomService && newAppointment.customService 
@@ -878,6 +967,90 @@ export default function AppointmentsNew() {
                 </div>
               </div>
 
+              {/* Product Add-ons */}
+              {products.length > 0 && (
+                <div className="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-semibold text-purple-900">🛍️ Product Add-ons</span>
+                    <span className="text-xs text-purple-600">(Optional)</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-xs">Add Products to Booking</Label>
+                    <Select onValueChange={addProductToAppointment}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Select products to add..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((product) => (
+                          <SelectItem key={product.id} value={product.id}>
+                            {product.name} - ₹{product.price}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedProducts.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      <p className="text-xs font-medium text-gray-700">Selected Products:</p>
+                      {selectedProducts.map((product) => (
+                        <div key={product.id} className="flex items-center justify-between bg-white p-2 rounded border">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">{product.name}</p>
+                            <p className="text-xs text-gray-500">₹{product.price} each</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => updateProductQuantity(product.id, product.quantity - 1)}
+                            >
+                              <Minus size={12} />
+                            </Button>
+                            <span className="text-sm font-medium w-8 text-center">{product.quantity}</span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => updateProductQuantity(product.id, product.quantity + 1)}
+                            >
+                              <Plus size={12} />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                              onClick={() => removeProductFromAppointment(product.id)}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="pt-2 border-t border-purple-200 flex justify-between items-center">
+                        <span className="text-sm font-semibold text-purple-900">Products Total:</span>
+                        <span className="text-sm font-bold text-purple-900">
+                          ₹{selectedProducts.reduce((sum, p) => sum + (parseFloat(p.price) * p.quantity), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      {newAppointment.amount && (
+                        <div className="pt-2 border-t border-purple-300 flex justify-between items-center">
+                          <span className="text-base font-bold text-purple-900">Grand Total:</span>
+                          <span className="text-base font-bold text-purple-900">
+                            ₹{calculateTotalWithProducts().toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Notes */}
               <div className="space-y-2">
                 <Label>Notes</Label>
@@ -1425,3 +1598,4 @@ export default function AppointmentsNew() {
     </DashboardLayout>
   );
 }
+

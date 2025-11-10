@@ -14,6 +14,7 @@ import CalendarPage from "@/pages/calendar";
 import TeamMembersPage from "@/pages/team-members";
 import BookingPagesPage from "@/pages/booking-pages";
 import ServicesPage from "@/pages/services";
+import ProductsPage from "@/pages/products";
 import CustomersPage from "@/pages/customers";
 import AdminCenterPage from "@/pages/admin";
 import SalespersonsPage from "@/pages/salespersons";
@@ -57,6 +58,7 @@ function Router() {
       <Route path="/dashboard/team-members" component={TeamMembersPage} />
       <Route path="/dashboard/booking-pages" component={BookingPagesPage} />
       <Route path="/dashboard/services" component={ServicesPage} />
+      <Route path="/dashboard/products" component={ProductsPage} />
       <Route path="/dashboard/customers" component={CustomersPage} />
       <Route path="/dashboard/admin-center" component={AdminCenterPage} />
       <Route path="/dashboard/admin-center/workspaces" component={Workspaces} />

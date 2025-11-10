@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -26,6 +27,7 @@ import {
   Filter,
   Calendar,
   Mail,
+  Plus,
 } from 'lucide-react';
 import {
   getAllInvoices,
@@ -44,43 +46,150 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [services, setServices] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [invoiceForm, setInvoiceForm] = useState({
+    customerName: '',
+    customerEmail: '',
+    customerPhone: '',
+    serviceOrProductId: '',
+    itemType: 'service', // 'service' or 'product'
+    paymentMethod: 'Cash',
+    currency: 'INR',
+    status: 'Paid' as 'Paid' | 'Pending' | 'Cancelled',
+    notes: '',
+  });
 
   const stats = useMemo(() => getInvoiceStats(), [invoices]);
 
-  // Create test invoice for testing
-  const handleCreateTestInvoice = async () => {
+  // Load services and products
+  useEffect(() => {
+    loadServicesAndProducts();
+    
+    const handleUpdate = () => loadServicesAndProducts();
+    window.addEventListener('services-updated', handleUpdate);
+    window.addEventListener('products-updated', handleUpdate);
+    
+    return () => {
+      window.removeEventListener('services-updated', handleUpdate);
+      window.removeEventListener('products-updated', handleUpdate);
+    };
+  }, []);
+
+  const loadServicesAndProducts = () => {
+    try {
+      const currentWorkspace = localStorage.getItem('zervos_current_workspace') || 'default';
+      
+      // Load services
+      const servicesKey = `zervos_services_${currentWorkspace}`;
+      const servicesRaw = localStorage.getItem(servicesKey);
+      if (servicesRaw) {
+        const servicesList = JSON.parse(servicesRaw);
+        setServices(Array.isArray(servicesList) ? servicesList.filter((s: any) => s.isEnabled) : []);
+      }
+      
+      // Load products
+      const productsKey = `zervos_products_${currentWorkspace}`;
+      const productsRaw = localStorage.getItem(productsKey);
+      if (productsRaw) {
+        const productsList = JSON.parse(productsRaw);
+        setProducts(Array.isArray(productsList) ? productsList.filter((p: any) => p.isEnabled) : []);
+      }
+    } catch (error) {
+      console.error('Error loading services and products:', error);
+    }
+  };
+
+  // Create invoice from form
+  const handleCreateInvoice = async () => {
+    if (!invoiceForm.customerName || !invoiceForm.customerEmail || !invoiceForm.serviceOrProductId) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please fill in all required fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const { createInvoice } = await import('@/lib/invoice-utils');
-    const testInvoice = createInvoice({
+    
+    // Find the selected service or product
+    const selectedItem = invoiceForm.itemType === 'service'
+      ? services.find(s => s.id === invoiceForm.serviceOrProductId)
+      : products.find(p => p.id === invoiceForm.serviceOrProductId);
+
+    if (!selectedItem) {
+      toast({
+        title: 'Item Not Found',
+        description: 'Selected service or product not found',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const getCurrencySymbol = (code: string) => {
+      const symbols: { [key: string]: string } = {
+        'INR': '₹', 'USD': '$', 'EUR': '€', 'GBP': '£', 'JPY': '¥',
+        'AUD': 'A$', 'CAD': 'C$', 'CHF': 'CHF', 'CNY': '¥', 'AED': 'د.إ',
+      };
+      return symbols[code] || '₹';
+    };
+
+    const price = parseFloat(selectedItem.price);
+    const subtotal = price;
+    const taxAmount = Math.round((subtotal * 18) / 100); // 18% tax
+    const amount = subtotal + taxAmount;
+
+    const companyData = localStorage.getItem('zervos_company');
+    const company = companyData ? JSON.parse(companyData) : { name: 'Your Company', email: '' };
+
+    const newInvoice = createInvoice({
       bookingId: 'BOOK-' + Date.now(),
       customer: {
-        name: 'Vaishak',
-        email: 'vaishak@example.com',
-        phone: '+91 9876543210',
+        name: invoiceForm.customerName,
+        email: invoiceForm.customerEmail,
+        phone: invoiceForm.customerPhone,
       },
       service: {
-        name: 'Beard Design',
-        duration: '30 min',
-        price: 381.00,
+        name: selectedItem.name,
+        duration: selectedItem.duration || (invoiceForm.itemType === 'product' ? `SKU: ${selectedItem.sku}` : 'N/A'),
+        price: price,
       },
-      amount: 4015.00,
-      subtotal: 3824.00,
-      taxAmount: 191.20,
-      paymentMethod: 'Custom UPI',
-      currency: '₹',
-      status: 'Paid',
+      amount: amount,
+      subtotal: subtotal,
+      taxAmount: taxAmount,
+      paymentMethod: invoiceForm.paymentMethod,
+      currency: getCurrencySymbol(invoiceForm.currency),
+      status: invoiceForm.status,
       company: {
-        name: 'Test Company',
-        email: 'test@company.com',
+        name: company.businessName || company.name || 'Your Company',
+        email: company.email || '',
       },
-      bookingDate: '01-11-2025',
-      bookingTime: '10:00 AM',
-      notes: 'Thank you for your business!',
+      bookingDate: new Date().toLocaleDateString(),
+      bookingTime: new Date().toLocaleTimeString(),
+      notes: invoiceForm.notes || 'Thank you for your business!',
     });
     
     setInvoices(getAllInvoices());
+    setIsCreateModalOpen(false);
+    
+    // Reset form
+    setInvoiceForm({
+      customerName: '',
+      customerEmail: '',
+      customerPhone: '',
+      serviceOrProductId: '',
+      itemType: 'service',
+      paymentMethod: 'Cash',
+      currency: 'INR',
+      status: 'Paid',
+      notes: '',
+    });
+    
     toast({
-      title: 'Test Invoice Created',
-      description: `Invoice ${testInvoice.invoiceId} has been created`,
+      title: 'Invoice Created',
+      description: `Invoice ${newInvoice.invoiceId} has been created`,
     });
   };
 
@@ -171,11 +280,10 @@ export default function InvoicesPage() {
             <h1 className="text-3xl font-bold text-gray-900">Invoices</h1>
             <p className="text-gray-600 mt-1">Manage and track all your billing invoices</p>
           </div>
-          {invoices.length === 0 && (
-            <Button onClick={handleCreateTestInvoice} className="bg-purple-600 hover:bg-purple-700">
-              + Create Test Invoice
-            </Button>
-          )}
+          <Button onClick={() => setIsCreateModalOpen(true)} className="bg-purple-600 hover:bg-purple-700">
+            <Plus className="mr-2" size={18} />
+            Create Invoice
+          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -381,6 +489,157 @@ export default function InvoicesPage() {
                 onClose={() => setIsViewModalOpen(false)}
               />
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Invoice Modal */}
+        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Create New Invoice</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* Customer Details */}
+              <div className="space-y-2">
+                <Label htmlFor="customerName">Customer Name *</Label>
+                <Input
+                  id="customerName"
+                  placeholder="John Doe"
+                  value={invoiceForm.customerName}
+                  onChange={(e) => setInvoiceForm({ ...invoiceForm, customerName: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="customerEmail">Email *</Label>
+                  <Input
+                    id="customerEmail"
+                    type="email"
+                    placeholder="john@example.com"
+                    value={invoiceForm.customerEmail}
+                    onChange={(e) => setInvoiceForm({ ...invoiceForm, customerEmail: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="customerPhone">Phone</Label>
+                  <Input
+                    id="customerPhone"
+                    placeholder="+91 9876543210"
+                    value={invoiceForm.customerPhone}
+                    onChange={(e) => setInvoiceForm({ ...invoiceForm, customerPhone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Item Selection */}
+              <div className="space-y-2">
+                <Label>Item Type</Label>
+                <Select
+                  value={invoiceForm.itemType}
+                  onValueChange={(value) => setInvoiceForm({ ...invoiceForm, itemType: value, serviceOrProductId: '' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="service">Service</SelectItem>
+                    <SelectItem value="product">Product</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Select {invoiceForm.itemType === 'service' ? 'Service' : 'Product'} *</Label>
+                <Select
+                  value={invoiceForm.serviceOrProductId}
+                  onValueChange={(value) => setInvoiceForm({ ...invoiceForm, serviceOrProductId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={`Choose a ${invoiceForm.itemType}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {invoiceForm.itemType === 'service' ? (
+                      services.length > 0 ? (
+                        services.map((service) => (
+                          <SelectItem key={service.id} value={service.id}>
+                            {service.name} - ₹{service.price}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="none" disabled>No services available</SelectItem>
+                      )
+                    ) : (
+                      products.length > 0 ? (
+                        products.map((product) => (
+                          <SelectItem key={product.id} value={product.id}>
+                            {product.name} - ₹{product.price}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="none" disabled>No products available</SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Payment Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <Select
+                    value={invoiceForm.paymentMethod}
+                    onValueChange={(value) => setInvoiceForm({ ...invoiceForm, paymentMethod: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="Card">Card</SelectItem>
+                      <SelectItem value="Net Banking">Net Banking</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={invoiceForm.status}
+                    onValueChange={(value) => setInvoiceForm({ ...invoiceForm, status: value as 'Paid' | 'Pending' | 'Cancelled' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Input
+                  id="notes"
+                  placeholder="Thank you for your business!"
+                  value={invoiceForm.notes}
+                  onChange={(e) => setInvoiceForm({ ...invoiceForm, notes: e.target.value })}
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateInvoice} className="bg-purple-600 hover:bg-purple-700">
+                Create Invoice
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

@@ -138,6 +138,7 @@ export default function WorkflowsPage() {
   const { selectedWorkspace } = useWorkspace();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [workflowLogs, setWorkflowLogs] = useState<WorkflowLog[]>([]);
+  const [services, setServices] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -166,15 +167,15 @@ export default function WorkflowsPage() {
     return selectedWorkspace ? `zervos_workflow_logs::${selectedWorkspace.id}` : null;
   }, [selectedWorkspace]);
 
-  // Available variables for templates
-  const variables = {
+  // Available variables for templates (dynamically updated with services)
+  const variables = useMemo(() => ({
     customer: ['{{customer.name}}', '{{customer.email}}', '{{customer.phone}}', '{{customer.id}}'],
     booking: ['{{booking.id}}', '{{booking.date}}', '{{booking.time}}', '{{booking.status}}', '{{booking.duration}}'],
     service: ['{{service.name}}', '{{service.price}}', '{{service.duration}}', '{{service.category}}'],
     organization: ['{{organization.name}}', '{{organization.timezone}}', '{{organization.email}}', '{{organization.phone}}'],
     staff: ['{{staff.name}}', '{{staff.email}}', '{{staff.phone}}'],
     payment: ['{{payment.amount}}', '{{payment.status}}', '{{payment.method}}']
-  };
+  }), []);
 
   // Workflow templates
   const workflowTemplates: WorkflowTemplate[] = [
@@ -193,7 +194,7 @@ export default function WorkflowsPage() {
             config: {
               to: '{{customer.email}}',
               subject: 'Booking Confirmed - {{service.name}}',
-              body: 'Hi {{customer.name}},\n\nYour booking for {{service.name}} on {{booking.date}} at {{booking.time}} has been confirmed.\n\nThank you!'
+              body: `Hi {{customer.name}},\n\nThank you for booking with us!\n\nService: {{service.name}}\nDate: {{booking.date}}\nTime: {{booking.time}}\nDuration: {{service.duration}}\nPrice: {{service.price}}\n\nWe look forward to seeing you!\n\nBest regards,\n{{organization.name}}`
             },
             order: 1
           },
@@ -203,7 +204,7 @@ export default function WorkflowsPage() {
             label: 'Send SMS Confirmation',
             config: {
               phoneNumber: '{{customer.phone}}',
-              message: 'Hi {{customer.name}}, your booking is confirmed for {{booking.date}} at {{booking.time}}.'
+              message: 'Hi {{customer.name}}! Your {{service.name}} booking is confirmed for {{booking.date}} at {{booking.time}}. See you then!'
             },
             order: 2
           }
@@ -258,6 +259,37 @@ export default function WorkflowsPage() {
             config: {
               crmSystem: 'salesforce',
               action: 'update_contact'
+            },
+            order: 2
+          }
+        ]
+      }
+    },
+    {
+      id: 't4',
+      name: 'Service-Specific Welcome',
+      description: 'Send customized welcome email based on booked service',
+      category: 'Service',
+      workflow: {
+        trigger: { type: 'booking_created', label: 'Booking Created' },
+        actions: [
+          {
+            id: 'a1',
+            type: 'email',
+            label: 'Send Service Welcome',
+            config: {
+              to: '{{customer.email}}',
+              subject: 'Welcome! Your {{service.name}} Appointment',
+              body: `Dear {{customer.name}},\n\nWelcome to {{organization.name}}!\n\nYou've booked: {{service.name}}\nCategory: {{service.category}}\nDuration: {{service.duration}}\nPrice: ₹{{service.price}}\n\nScheduled for: {{booking.date}} at {{booking.time}}\n\nWhat to expect:\n- Please arrive 10 minutes early\n- Bring any necessary items\n- Feel free to ask questions\n\nLooking forward to serving you!\n\nBest,\n{{organization.name}} Team`
+            },
+            order: 1
+          },
+          {
+            id: 'a2',
+            type: 'add_tag',
+            label: 'Tag Customer',
+            config: {
+              tagName: '{{service.category}}_customer'
             },
             order: 2
           }
@@ -331,6 +363,31 @@ export default function WorkflowsPage() {
       tags: ['reminder']
     }
   ];
+
+  // Load services from localStorage
+  useEffect(() => {
+    if (!selectedWorkspace) {
+      setServices([]);
+      return;
+    }
+    const loadServices = () => {
+      const stored = localStorage.getItem(`zervos_services_${selectedWorkspace.id}`);
+      if (stored) {
+        const parsedServices = JSON.parse(stored);
+        setServices(parsedServices.filter((s: any) => s.isEnabled));
+      }
+    };
+
+    loadServices();
+
+    // Listen for service updates
+    const handleServicesUpdate = () => loadServices();
+    window.addEventListener('services-updated', handleServicesUpdate);
+
+    return () => {
+      window.removeEventListener('services-updated', handleServicesUpdate);
+    };
+  }, [selectedWorkspace]);
 
   // Load workflows when workspace changes
   useEffect(() => {
@@ -1190,7 +1247,32 @@ export default function WorkflowsPage() {
 
                 {/* Templates Tab */}
                 <TabsContent value="templates" className="space-y-4 mt-4">
-                  <p className="text-sm text-gray-600">Apply pre-built workflow templates</p>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Available Services</h4>
+                      <p className="text-xs text-gray-600 mb-3">
+                        Use these services in your workflow templates with variables like {'{{service.name}}'}, {'{{service.price}}'}, {'{{service.category}}'}
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg border">
+                        {services.length > 0 ? (
+                          services.slice(0, 12).map((service) => (
+                            <div key={service.id} className="text-xs px-2 py-1 bg-white border rounded flex items-center gap-1">
+                              <Tag size={12} className="text-purple-600" />
+                              <span className="truncate">{service.name}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="col-span-3 text-center text-xs text-gray-500 py-2">
+                            No services available. Add services in the Services page.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Workflow Templates</h4>
+                      <p className="text-xs text-gray-600 mb-3">Apply pre-built workflow templates</p>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {workflowTemplates.map((template) => (
                       <div key={template.id} className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition-colors">
@@ -1311,25 +1393,48 @@ export default function WorkflowsPage() {
                           placeholder="Email body content. Use {{customer.name}}, {{booking.date}}, etc."
                           rows={6}
                         />
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {Object.entries(variables).map(([category, vars]) => (
-                            <div key={category} className="flex gap-1">
-                              {Object.keys(vars).slice(0, 2).map((varKey) => {
-                                const varValue = String(vars[varKey as keyof typeof vars]);
-                                return (
-                                  <Button
-                                    key={varKey}
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs"
-                                    onClick={() => insertVariable(varValue, 'body')}
-                                  >
-                                    {varValue}
-                                  </Button>
-                                );
-                              })}
+                        <div className="space-y-2 mt-2">
+                          <p className="text-xs font-medium text-gray-700">Quick Insert Variables:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(variables).map(([category, vars]) => (
+                              <div key={category} className="flex gap-1">
+                                {Object.keys(vars).slice(0, 2).map((varKey) => {
+                                  const varValue = String(vars[varKey as keyof typeof vars]);
+                                  return (
+                                    <Button
+                                      key={varKey}
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-xs"
+                                      onClick={() => insertVariable(varValue, 'body')}
+                                    >
+                                      {varValue}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                          {services.length > 0 && (
+                            <div className="bg-purple-50 border border-purple-200 rounded p-2">
+                              <p className="text-xs font-medium text-purple-900 mb-1">Available Services:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {services.slice(0, 6).map((service) => (
+                                  <span key={service.id} className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                                    {service.name}
+                                  </span>
+                                ))}
+                                {services.length > 6 && (
+                                  <span className="text-xs px-2 py-0.5 text-purple-600">
+                                    +{services.length - 6} more
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-purple-700 mt-1">
+                                Use {'{{service.name}}'}, {'{{service.price}}'}, {'{{service.duration}}'} in your template
+                              </p>
                             </div>
-                          ))}
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1723,9 +1828,25 @@ export default function WorkflowsPage() {
                     <option value="reminder">24h Reminder</option>
                   </Select>
                 </div>
+                {services.length > 0 && (
+                  <div>
+                    <Label>Sample Service</Label>
+                    <Select defaultValue={services[0]?.id}>
+                      {services.slice(0, 10).map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name} - ₹{service.price}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label>Sample Customer Email</Label>
                   <Input defaultValue="test.customer@example.com" />
+                </div>
+                <div>
+                  <Label>Sample Customer Name</Label>
+                  <Input defaultValue="John Doe" />
                 </div>
                 <div>
                   <Label>Sample Booking Date</Label>
