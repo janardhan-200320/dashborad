@@ -52,16 +52,11 @@ const STORAGE_KEY = 'zervos_onboarding';
 export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
   const [currentStep, setCurrentStep] = useState(1);
   
-  // Initialize with localStorage data or defaults
+  // Initialize with fresh data (no pre-filled defaults)
   const [data, setData] = useState<OnboardingData>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // If parsing fails, use defaults
-      }
-    }
+    // Always start fresh - clear any old onboarding data
+    localStorage.removeItem(STORAGE_KEY);
+    
     return {
       businessName: '',
       businessLogo: '',
@@ -75,8 +70,8 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
       availableDays: [],
       availableTimeStart: '09:00 am',
       availableTimeEnd: '06:00 pm',
-      eventTypeLabel: 'Properties Management',
-      teamMemberLabel: 'Agents',
+      eventTypeLabel: '',
+      teamMemberLabel: '',
       customFields: [],
       isCompleted: false,
     };

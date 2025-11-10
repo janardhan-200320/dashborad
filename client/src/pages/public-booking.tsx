@@ -94,6 +94,17 @@ export default function PublicBookingPage() {
   const [bookingSettings, setBookingSettings] = useState<BookingPageSettings | null>(null);
   const [memberSchedule, setMemberSchedule] = useState<Record<string, { enabled: boolean; start: string; end: string }> | null>(null);
   const [assignedMemberId, setAssignedMemberId] = useState<string | null>(null);
+  const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
+
+  // Listen for time slot updates
+  useEffect(() => {
+    const handleSlotsUpdate = () => {
+      setSlotsRefreshKey(prev => prev + 1);
+    };
+    
+    window.addEventListener('timeslots-updated', handleSlotsUpdate);
+    return () => window.removeEventListener('timeslots-updated', handleSlotsUpdate);
+  }, []);
 
   // Load booking form field configuration
   useEffect(() => {
@@ -389,25 +400,60 @@ export default function PublicBookingPage() {
     setCalendarDays(days);
   };
 
-  // Base time slots
-  const timeSlots: TimeSlot[] = [
-    { time: '09:00 AM', available: true },
-    { time: '09:30 AM', available: true },
-    { time: '10:00 AM', available: false },
-    { time: '10:30 AM', available: true },
-    { time: '11:00 AM', available: true },
-    { time: '11:30 AM', available: true },
-    { time: '12:00 PM', available: false },
-    { time: '01:00 PM', available: true },
-    { time: '01:30 PM', available: true },
-    { time: '02:00 PM', available: true },
-    { time: '02:30 PM', available: true },
-    { time: '03:00 PM', available: true },
-    { time: '03:30 PM', available: true },
-    { time: '04:00 PM', available: true },
-    { time: '04:30 PM', available: false },
-    { time: '05:00 PM', available: true },
-  ];
+  // Dynamic time slots from Time Slot Management
+  const timeSlots: TimeSlot[] = useMemo(() => {
+    try {
+      const slots = localStorage.getItem('zervos_timeslots');
+      if (!slots || !selectedDate) {
+        // Fallback to hardcoded slots
+        return [
+          { time: '09:00 AM', available: true },
+          { time: '10:00 AM', available: true },
+          { time: '11:00 AM', available: true },
+          { time: '01:00 PM', available: true },
+          { time: '02:00 PM', available: true },
+          { time: '03:00 PM', available: true },
+          { time: '04:00 PM', available: true },
+        ];
+      }
+
+      const parsedSlots = JSON.parse(slots);
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const selectedDayName = dayNames[selectedDate.getDay()];
+
+      // Filter slots for the selected day
+      const daySlots = parsedSlots.filter((slot: any) => 
+        slot.dayOfWeek === selectedDayName && slot.isActive
+      );
+
+      // Convert 24h time to 12h format
+      const formatTime = (time24: string) => {
+        const [hours, minutes] = time24.split(':').map(Number);
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const hours12 = hours % 12 || 12;
+        return `${hours12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${period}`;
+      };
+
+      return daySlots.map((slot: any) => ({
+        time: formatTime(slot.startTime),
+        available: slot.currentBookings < slot.maxBookings,
+      })).sort((a: TimeSlot, b: TimeSlot) => {
+        // Sort by time
+        return a.time.localeCompare(b.time);
+      });
+    } catch (error) {
+      console.error('Error loading time slots:', error);
+      return [
+        { time: '09:00 AM', available: true },
+        { time: '10:00 AM', available: true },
+        { time: '11:00 AM', available: true },
+        { time: '01:00 PM', available: true },
+        { time: '02:00 PM', available: true },
+        { time: '03:00 PM', available: true },
+        { time: '04:00 PM', available: true },
+      ];
+    }
+  }, [selectedDate, slotsRefreshKey]);
 
   const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 

@@ -25,6 +25,7 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [selectedWorkspace, setSelectedWorkspaceState] = useState<Workspace | null>(null);
   const [workspaces, setWorkspacesState] = useState<Workspace[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     // Load company info for default workspace
@@ -64,6 +65,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       
       parsed = [defaultWorkspace];
       try { localStorage.setItem('workspaces', JSON.stringify(parsed)); } catch {}
+    } else if (company?.name && parsed.length === 1) {
+      // Update the first workspace name if company name is available
+      // This ensures workspace name stays in sync with business name
+      const firstWorkspace = parsed[0];
+      if (firstWorkspace.name !== company.name || firstWorkspace.initials !== company.name.substring(0, 2).toUpperCase()) {
+        firstWorkspace.name = company.name;
+        firstWorkspace.initials = company.name.substring(0, 2).toUpperCase();
+        firstWorkspace.description = company.industry || firstWorkspace.description;
+        try { localStorage.setItem('workspaces', JSON.stringify(parsed)); } catch {}
+      }
     }
     
     setWorkspacesState(parsed);
@@ -85,6 +96,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (selected) {
       setSelectedWorkspaceState(selected);
     }
+  }, [refreshKey]);
+
+  // Listen for company changes to update workspace name
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'zervos_company') {
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+
+    const handleLocalChange = () => {
+      setRefreshKey(prev => prev + 1);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('localStorageChanged', handleLocalChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('localStorageChanged', handleLocalChange);
+    };
   }, []);
 
   const setSelectedWorkspace = (workspace: Workspace | null) => {

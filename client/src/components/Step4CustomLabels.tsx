@@ -98,8 +98,8 @@ const LABEL_SUGGESTIONS = {
 
 export default function Step4CustomLabels() {
   const { data, updateData, prevStep } = useOnboarding();
-  const [eventTypeLabel, setEventTypeLabel] = useState(data.eventTypeLabel || '');
-  const [teamMemberLabel, setTeamMemberLabel] = useState(data.teamMemberLabel || '');
+  const [eventTypeLabel, setEventTypeLabel] = useState('');
+  const [teamMemberLabel, setTeamMemberLabel] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -107,13 +107,6 @@ export default function Step4CustomLabels() {
   // Get the selected industry from previous step
   const selectedIndustry = data.industries?.[0] || 'Others';
   const suggestions = LABEL_SUGGESTIONS[selectedIndustry as keyof typeof LABEL_SUGGESTIONS] || LABEL_SUGGESTIONS['Others'];
-
-  // Set default labels based on industry when component mounts or industry changes
-  useEffect(() => {
-    // Always set to industry defaults when industry is present
-    setEventTypeLabel(suggestions.eventTypeDefault);
-    setTeamMemberLabel(suggestions.teamMemberDefault);
-  }, [selectedIndustry, suggestions.eventTypeDefault, suggestions.teamMemberDefault]);
 
   const handleCreate = async () => {
     updateData({ eventTypeLabel, teamMemberLabel });
@@ -144,6 +137,14 @@ export default function Step4CustomLabels() {
       };
       try {
         localStorage.setItem('zervos_company', JSON.stringify(companyProfile));
+        
+        // Also save to zervos_organization for ProfileDropdown
+        const orgProfile = {
+          businessName: finalData.businessName || 'Your Company',
+          email: 'No email',
+          timezone: finalData.timezone || 'America/New_York',
+        };
+        localStorage.setItem('zervos_organization', JSON.stringify(orgProfile));
       } catch {}
 
       toast({
@@ -188,19 +189,12 @@ export default function Step4CustomLabels() {
           </Label>
           <Input
             id="eventType"
-            placeholder={suggestions.eventTypeDefault}
+            placeholder="e.g., Sessions, Bookings"
             value={eventTypeLabel}
             onChange={(e) => setEventTypeLabel(e.target.value)}
             data-testid="input-event-type-label"
             className="h-11"
           />
-          <div className="flex items-start gap-2 mt-2 p-3 bg-muted/50 rounded-md">
-            <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-            <div className="text-xs text-muted-foreground">
-              <p className="font-medium mb-1">Suggestions for {selectedIndustry}:</p>
-              <p>{suggestions.eventTypeSuggestions.join(', ')}</p>
-            </div>
-          </div>
         </div>
 
         <div className="space-y-2">
@@ -209,19 +203,12 @@ export default function Step4CustomLabels() {
           </Label>
           <Input
             id="teamMember"
-            placeholder={suggestions.teamMemberDefault}
+            placeholder="e.g., Team Members, Stylists, Therapists"
             value={teamMemberLabel}
             onChange={(e) => setTeamMemberLabel(e.target.value)}
             data-testid="input-team-member-label"
             className="h-11"
           />
-          <div className="flex items-start gap-2 mt-2 p-3 bg-muted/50 rounded-md">
-            <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-            <div className="text-xs text-muted-foreground">
-              <p className="font-medium mb-1">Suggestions for {selectedIndustry}:</p>
-              <p>{suggestions.teamMemberSuggestions.join(', ')}</p>
-            </div>
-          </div>
         </div>
       </div>
 

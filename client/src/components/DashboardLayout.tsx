@@ -14,12 +14,17 @@ import {
   Sparkles,
   ShieldCheck,
   UserPlus,
+  ShoppingCart,
+  Clock,
 } from 'lucide-react';
+import NotificationDropdown from './NotificationDropdown';
 import ProfileDropdown from './ProfileDropdown';
 import WorkspaceSelector from './WorkspaceSelector';
 import AnimatedButton from './AnimatedButton';
 import PageTransition from './PageTransition';
 import TopProgressBar from './TopProgressBar';
+import TimeSlotsButton from './TimeSlotsButton';
+import HelpSupportButton from './HelpSupportButton';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { safeGetItem } from '@/lib/storage';
 
@@ -78,16 +83,18 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
   const teamMemberLabel = company?.teamMemberLabel || 'Salespersons';
 
   const navigation = [
+    { name: 'Dashboard', icon: LayoutGrid, path: '/dashboard' },
+    { name: eventTypeLabel, icon: PhoneCall, path: '/dashboard/sessions' },
     { name: 'Appointments', icon: Calendar, path: '/dashboard/appointments' },
-    { name: eventTypeLabel, icon: PhoneCall, path: '/dashboard/callbacks' },
     { name: 'Workflows', icon: Settings, path: '/dashboard/workflows' },
-    { name: teamMemberLabel, icon: Users, path: '/dashboard/settings' },
-    { name: 'Booking Pages', icon: FileText, path: '/dashboard/form-info' },
+    { name: teamMemberLabel, icon: Users, path: '/dashboard/team-members' },
+    { name: 'Booking Pages', icon: FileText, path: '/dashboard/booking-pages' },
   ];
 
   const secondaryNavigation = [
     { name: 'Leads', icon: UserPlus, path: '/dashboard/leads' },
     { name: 'Invoices', icon: FileText, path: '/dashboard/invoices' },
+    { name: 'POS', icon: ShoppingCart, path: '/dashboard/pos' },
     { name: 'Admin Center', icon: LayoutGrid, path: '/dashboard/admin-center' },
   ];
 
@@ -311,14 +318,15 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="hidden h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500 ring-1 ring-slate-200 sm:inline-flex"
-                aria-label="Notifications"
-              >
-                <Bell size={18} />
-              </motion.button>
+              <div className="hidden sm:inline-flex">
+                <TimeSlotsButton />
+              </div>
+              <div className="hidden sm:inline-flex">
+                <HelpSupportButton />
+              </div>
+              <div className="hidden sm:inline-flex">
+                <NotificationDropdown />
+              </div>
               {selectedWorkspace ? (
                 <motion.div
                   layout

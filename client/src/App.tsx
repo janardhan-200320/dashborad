@@ -7,11 +7,12 @@ import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
 import Onboarding from "@/pages/onboarding";
 import Success from "@/pages/success";
 import DashboardMain from "@/pages/dashboard-main";
+import DashboardOverview from "@/pages/dashboard-overview";
 import AppointmentsPage from "@/pages/AppointmentsNew";
-import CallbacksPage from "@/pages/callbacks";
+import SessionsPage from "@/pages/sessions";
 import CalendarPage from "@/pages/calendar";
-import SettingsPage from "@/pages/settings";
-import FormInfoPage from "@/pages/form-info";
+import TeamMembersPage from "@/pages/team-members";
+import BookingPagesPage from "@/pages/booking-pages";
 import ServicesPage from "@/pages/services";
 import CustomersPage from "@/pages/customers";
 import AdminCenterPage from "@/pages/admin";
@@ -21,7 +22,11 @@ import WorkflowsPage from "@/pages/workflows";
 import AccountPage from "@/pages/Account";
 import SubscriptionPage from "@/pages/Subscription";
 import InvoicesPage from "@/pages/Invoices";
+import POSPage from "@/pages/POS";
+import POSRegister from "@/pages/POSRegister";
 import LeadsPage from "@/pages/LeadsSimple";
+import TimeSlotsPage from "@/pages/time-slots";
+import HelpSupportPage from "@/pages/help-support";
 import Workspaces from "@/pages/admin/Workspaces";
 import WorkspaceView from "@/pages/admin/WorkspaceView";
 import Resources from "@/pages/admin/Resources";
@@ -42,13 +47,15 @@ function Router() {
   <Route path="/team/login" component={TeamLogin} />
   <Route path="/team" component={TeamDashboard} />
   <Route path="/team/public/:memberId" component={TeamPublicView} />
-      <Route path="/dashboard" component={FormInfoPage} />
+      <Route path="/dashboard" component={DashboardOverview} />
       <Route path="/dashboard/appointments" component={AppointmentsPage} />
       <Route path="/dashboard/workflows" component={WorkflowsPage} />
-      <Route path="/dashboard/callbacks" component={CallbacksPage} />
+      <Route path="/dashboard/sessions" component={SessionsPage} />
       <Route path="/dashboard/calendar" component={CalendarPage} />
-      <Route path="/dashboard/settings" component={SettingsPage} />
-      <Route path="/dashboard/form-info" component={FormInfoPage} />
+      <Route path="/dashboard/time-slots" component={TimeSlotsPage} />
+      <Route path="/dashboard/help-support" component={HelpSupportPage} />
+      <Route path="/dashboard/team-members" component={TeamMembersPage} />
+      <Route path="/dashboard/booking-pages" component={BookingPagesPage} />
       <Route path="/dashboard/services" component={ServicesPage} />
       <Route path="/dashboard/customers" component={CustomersPage} />
       <Route path="/dashboard/admin-center" component={AdminCenterPage} />
@@ -57,7 +64,9 @@ function Router() {
       <Route path="/dashboard/workspace/:id" component={WorkspaceView} />
       <Route path="/dashboard/salespersons" component={SalespersonsPage} />
       <Route path="/dashboard/leads" component={LeadsPage} />
-      <Route path="/dashboard/invoices" component={InvoicesPage} />
+  <Route path="/dashboard/invoices" component={InvoicesPage} />
+  <Route path="/dashboard/pos" component={POSPage} />
+  <Route path="/pos-register" component={POSRegister} />
       <Route path="/dashboard/account" component={AccountPage} />
       <Route path="/dashboard/subscription" component={SubscriptionPage} />
       <Route component={NotFound} />
