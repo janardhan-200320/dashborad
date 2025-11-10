@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Plus, Search, Filter, MoreVertical, Mail, Phone, Calendar, Building2, 
@@ -181,6 +181,8 @@ export default function LeadsPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const { toast } = useToast();
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [company, setCompany] = useState<any>(null);
   const [newLead, setNewLead] = useState({
     name: '',
     email: '',
@@ -200,8 +202,53 @@ export default function LeadsPage() {
     leadValue: '',
     website: '',
     defaultLanguage: 'System Default',
+    assigned: '',
   });
   const [currentTag, setCurrentTag] = useState('');
+
+  // Load company data and team members
+  useEffect(() => {
+    try {
+      const companyData = localStorage.getItem('zervos_company');
+      if (companyData) {
+        setCompany(JSON.parse(companyData));
+      }
+    } catch (error) {
+      console.error('Error loading company data:', error);
+    }
+
+    // Load team members
+    try {
+      const keys = ['zervos_team_members'];
+      // Try to get all workspace-specific team member keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('zervos_team_members::')) {
+          keys.push(key);
+        }
+      }
+      
+      let members: any[] = [];
+      for (const key of keys) {
+        const data = localStorage.getItem(key);
+        if (data) {
+          const parsed = JSON.parse(data);
+          if (Array.isArray(parsed)) {
+            members = [...members, ...parsed];
+          }
+        }
+      }
+      
+      // Remove duplicates by id
+      const uniqueMembers = members.filter((member, index, self) =>
+        index === self.findIndex((m) => m.id === member.id)
+      );
+      
+      setTeamMembers(uniqueMembers);
+    } catch (error) {
+      console.error('Error loading team members:', error);
+    }
+  }, []);
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = 
@@ -261,6 +308,7 @@ export default function LeadsPage() {
       leadValue: '',
       website: '',
       defaultLanguage: 'System Default',
+      assigned: '',
     });
     setCurrentTag('');
     
@@ -688,15 +736,26 @@ export default function LeadsPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="assigned">Assigned</Label>
-                <Select defaultValue="finas-zollid">
+                <Label htmlFor="assigned">
+                  Assigned {company?.teamMemberLabel || 'Team Member'}
+                </Label>
+                <Select 
+                  value={newLead.assigned}
+                  onValueChange={(value) => setNewLead({...newLead, assigned: value})}
+                >
                   <SelectTrigger className="border-slate-300 focus:border-brand-500 focus:ring-brand-200">
-                    <SelectValue />
+                    <SelectValue placeholder={teamMembers.length > 0 ? `Select ${company?.teamMemberLabel || 'Team Member'}` : 'No staff available'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="finas-zollid">Finas Zollid</SelectItem>
-                    <SelectItem value="john-doe">John Doe</SelectItem>
-                    <SelectItem value="jane-smith">Jane Smith</SelectItem>
+                    {teamMembers.length > 0 ? (
+                      teamMembers.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name} {member.role ? `(${member.role})` : ''}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="none" disabled>No staff available</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1037,6 +1096,7 @@ export default function LeadsPage() {
                     leadValue: '',
                     website: '',
                     defaultLanguage: 'System Default',
+                    assigned: '',
                   });
                   setCurrentTag('');
                 }}
