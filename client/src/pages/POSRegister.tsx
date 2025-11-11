@@ -88,6 +88,7 @@ export default function POSRegister() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [staffName, setStaffName] = useState('');
   const { toast } = useToast();
 
   // Custom service form
@@ -218,6 +219,16 @@ export default function POSRegister() {
   };
 
   const handleCompleteSale = () => {
+    // Validate staff name
+    if (!staffName.trim()) {
+      toast({
+        title: 'Staff name required',
+        description: 'Please enter the staff member handling this bill',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Create transaction object
     const transaction = {
       id: `POS-${Date.now()}`,
@@ -234,7 +245,7 @@ export default function POSRegister() {
       date: new Date().toISOString().split('T')[0],
       amount: total,
       status: 'Completed' as const,
-      staff: 'Current User',
+      staff: staffName.trim(),
       openBalance: 0,
       totalReturn: 0,
       balanceAmount: total,
@@ -261,6 +272,7 @@ export default function POSRegister() {
     setCart({});
     setShowCheckout(false);
     setCustomerName('');
+    setStaffName('');
     setPaymentMethod('cash');
   };
 
@@ -395,7 +407,7 @@ export default function POSRegister() {
                           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                             <Button
                               onClick={() => addToCart(service.id)}
-                              className={`bg-gradient-to-r ${gradient} hover:opacity-90 text-white shadow-md`}
+                              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md"
                               size="sm"
                             >
                               <Plus className="mr-1 h-4 w-4" />
@@ -446,6 +458,20 @@ export default function POSRegister() {
                     Clear
                   </Button>
                 )}
+              </div>
+
+              {/* Staff Name Field */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <Label htmlFor="staff-name" className="text-sm font-medium text-blue-900 mb-1 block">
+                  Staff Handling Bill
+                </Label>
+                <Input
+                  id="staff-name"
+                  placeholder="Enter staff name"
+                  value={staffName}
+                  onChange={(e) => setStaffName(e.target.value)}
+                  className="bg-white border-blue-300 focus:border-blue-500 focus:ring-blue-200"
+                />
               </div>
 
               <div className="border-t pt-4">

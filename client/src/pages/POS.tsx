@@ -114,6 +114,7 @@ export default function POSPage() {
   const [taxPercent, setTaxPercent] = useState<number>(18);
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [selectedBooking, setSelectedBooking] = useState<string | null>(null);
+  const [teamMember, setTeamMember] = useState<string>('');
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const printableRef = useRef<HTMLDivElement | null>(null);
@@ -348,10 +349,22 @@ export default function POSPage() {
       date: new Date().toISOString().slice(0, 10),
       amount,
       status: 'Completed',
+      staff: teamMember || 'Not specified',
+      openBalance: 0,
+      totalReturn: 0,
+      balanceAmount: amount,
+      orderValue: amount,
       currency: '₹',
     };
-    setTransactions((s) => [newTx, ...s]);
+    
+    // Save to localStorage
+    const updatedTransactions = [newTx, ...transactions];
+    setTransactions(updatedTransactions);
+    localStorage.setItem('pos_transactions', JSON.stringify(updatedTransactions));
+    
+    // Reset form
     setCart({});
+    setTeamMember('');
     setShowRegister(false);
     toast({ title: 'Sale recorded', description: `${format(amount)} recorded${selectedBooking ? ' (linked to ' + selectedBooking + ')' : ''}` });
     // open receipt preview so user can print/export
@@ -607,8 +620,8 @@ export default function POSPage() {
                         <option value="Spa">Spa</option>
                         <option value="Wellness">Wellness</option>
                       </select>
-                      <button onClick={()=>addCustomService(true)} className="rounded-md bg-brand-500 px-3 py-1 text-white">Add & Add to cart</button>
-                      <button onClick={()=>addCustomService(false)} className="rounded-md border px-3 py-1">Add</button>
+                      <button onClick={()=>addCustomService(true)} className="rounded-md bg-blue-600 px-3 py-1 text-white hover:bg-blue-700">Add & Add to cart</button>
+                      <button onClick={()=>addCustomService(false)} className="rounded-md bg-blue-600 px-3 py-1 text-white hover:bg-blue-700">Add</button>
                     </div>
                   </div>
                 )}
@@ -622,7 +635,7 @@ export default function POSPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-sm font-semibold">₹{(p.price/100).toFixed(2)}</div>
-                        <button onClick={() => addToCart(p.id)} className="inline-flex items-center gap-2 rounded-md bg-brand-500 px-3 py-2 text-white shadow-sm hover:bg-brand-600"><Plus size={14} /> Add Service</button>
+                        <button onClick={() => addToCart(p.id)} className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-white shadow-sm hover:bg-blue-700"><Plus size={14} /> Add Service</button>
                       </div>
                     </div>
                   ))}
@@ -671,6 +684,16 @@ export default function POSPage() {
                             <option>Card</option>
                             <option>UPI</option>
                           </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm">Team Member</label>
+                          <input 
+                            type="text" 
+                            value={teamMember} 
+                            onChange={(e) => setTeamMember(e.target.value)} 
+                            placeholder="Enter name"
+                            className="flex-1 rounded-md border px-2 py-1"
+                          />
                         </div>
                         <div className="flex items-center gap-2">
                           <label className="text-sm">Link Booking</label>
