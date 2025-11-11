@@ -49,21 +49,81 @@ interface Salesperson {
   notes?: string;
 }
 
-// Default permissions template
-const DEFAULT_PERMISSIONS: Permission[] = [
-  { module: 'Dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: false },
-  { module: 'Customers', canView: true, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Services', canView: true, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Reports', canView: false, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Settings', canView: false, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Workflows', canView: false, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Team', canView: false, canCreate: false, canEdit: false, canDelete: false },
-  // Team portal specific modules
-  { module: 'Sales Calls', canView: true, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Availability', canView: true, canCreate: false, canEdit: false, canDelete: false },
-  { module: 'Booking Pages', canView: true, canCreate: false, canEdit: false, canDelete: false },
-];
+const ROLE_PERMISSION_TEMPLATES: Record<Salesperson['role'], Permission[]> = {
+  'Super Admin': [
+    { module: 'Dashboard', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Customers', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Services', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Reports', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Settings', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Workflows', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Team', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Sales Calls', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Availability', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Booking Pages', canView: true, canCreate: true, canEdit: true, canDelete: true },
+  ],
+  'Admin': [
+    { module: 'Dashboard', canView: true, canCreate: false, canEdit: true, canDelete: false },
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Customers', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Services', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Reports', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Settings', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Workflows', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Team', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Sales Calls', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Availability', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Booking Pages', canView: true, canCreate: true, canEdit: true, canDelete: false },
+  ],
+  'Manager': [
+    { module: 'Dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Customers', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Services', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Reports', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Settings', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Workflows', canView: true, canCreate: true, canEdit: false, canDelete: false },
+    { module: 'Team', canView: true, canCreate: false, canEdit: true, canDelete: false },
+    { module: 'Sales Calls', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Availability', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Booking Pages', canView: true, canCreate: true, canEdit: true, canDelete: false },
+  ],
+  'Staff': [
+    { module: 'Dashboard', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Customers', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Services', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Reports', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Settings', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Workflows', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Team', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Sales Calls', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Availability', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Booking Pages', canView: true, canCreate: false, canEdit: false, canDelete: false },
+  ],
+};
+
+const clonePermissions = (perms: Permission[]): Permission[] =>
+  perms.map((perm) => ({ ...perm }));
+
+const getRolePermissionTemplate = (role: Salesperson['role']): Permission[] =>
+  clonePermissions(ROLE_PERMISSION_TEMPLATES[role] || ROLE_PERMISSION_TEMPLATES['Staff']);
+
+const mergePermissionsWithRole = (role: Salesperson['role'], existing?: Permission[]): Permission[] => {
+  const template = getRolePermissionTemplate(role);
+  if (!existing || existing.length === 0) return template;
+  const byModule = new Map(template.map((perm) => [perm.module, perm]));
+  for (const perm of existing) {
+    if (!perm || !perm.module) continue;
+    const current = byModule.get(perm.module);
+    byModule.set(perm.module, current ? { ...current, ...perm } : { ...perm });
+  }
+  return Array.from(byModule.values());
+};
+
+// Default permissions template per staff member
+const DEFAULT_PERMISSIONS: Permission[] = getRolePermissionTemplate('Staff');
 
 // Default weekly schedule
 const DEFAULT_SCHEDULE: AvailabilitySchedule[] = [
@@ -75,6 +135,36 @@ const DEFAULT_SCHEDULE: AvailabilitySchedule[] = [
   { day: 'Saturday', enabled: false, startTime: '09:00', endTime: '17:00' },
   { day: 'Sunday', enabled: false, startTime: '09:00', endTime: '17:00' },
 ];
+
+const cloneSchedule = (schedule?: AvailabilitySchedule[]): AvailabilitySchedule[] => {
+  const base = schedule && schedule.length ? schedule : DEFAULT_SCHEDULE;
+  return base.map((entry) => ({ ...entry }));
+};
+
+const ensurePersonShape = (person: Salesperson): Salesperson => ({
+  ...person,
+  permissions: mergePermissionsWithRole(person.role, person.permissions),
+  availabilitySchedule: cloneSchedule(person.availabilitySchedule),
+  teamViewLink: person.teamViewLink || `/team/public/${person.id}`,
+});
+
+const createBlankPerson = (): Omit<Salesperson, 'id'> => ({
+  name: '',
+  email: '',
+  phone: '',
+  role: 'Staff',
+  workspace: 'bharath',
+  status: 'Active',
+  availability: 'Full Time',
+  workload: 'Low',
+  profilePicture: '',
+  permissions: getRolePermissionTemplate('Staff'),
+  availabilitySchedule: cloneSchedule(),
+  timezone: 'Asia/Kolkata',
+  totalBookings: 0,
+  averageRating: 0,
+  notes: '',
+});
 
 // Helper function to generate booking link
 const generateBookingLink = (name: string, id: string): string => {
@@ -134,7 +224,7 @@ export default function Salespersons() {
       if (m.role === 'Admin' || m.role === 'Super Admin' || m.role === 'Manager') role = m.role;
       // Default workspace if absent
       const workspace = m.workspace || 'bharath';
-      return {
+      const base: Salesperson = {
         id,
         name: m.name || '',
         email: m.email || '',
@@ -145,14 +235,16 @@ export default function Salespersons() {
         availability: m.availability || 'Full Time',
         workload: m.workload || 'Low',
         profilePicture: m.profilePicture || undefined,
-        permissions: [...DEFAULT_PERMISSIONS],
-        availabilitySchedule: [...DEFAULT_SCHEDULE],
+        permissions: Array.isArray(m.permissions) ? m.permissions : undefined,
+        availabilitySchedule: Array.isArray(m.availabilitySchedule) ? m.availabilitySchedule : undefined,
         timezone: m.timezone || 'Asia/Kolkata',
         totalBookings: m.appointmentsCount || 0,
         averageRating: typeof m.averageRating === 'number' ? m.averageRating : 0,
         bookingLink: m.bookingLink || generateBookingLink(m.name || 'member', id),
+        teamViewLink: m.teamViewLink || `/team/public/${id}`,
         notes: m.notes || '',
-      } as Salesperson;
+      };
+      return ensurePersonShape(base);
     });
   };
 
@@ -207,11 +299,14 @@ export default function Salespersons() {
       const sidebarRaw = workspaceKey ? (localStorage.getItem(workspaceKey) || localStorage.getItem('zervos_team_members')) : localStorage.getItem('zervos_team_members');
       const adminRaw = localStorage.getItem('zervos_salespersons');
       const sidebarList = sidebarRaw ? normalizeFromTeamMembers(JSON.parse(sidebarRaw)) : [];
-      const adminList: Salesperson[] = adminRaw ? JSON.parse(adminRaw) : [];
+      const adminListRaw = adminRaw ? JSON.parse(adminRaw) : [];
+      const adminList: Salesperson[] = Array.isArray(adminListRaw)
+        ? adminListRaw.map((entry: Salesperson) => ensurePersonShape(entry))
+        : [];
       const byEmail = new Map<string, Salesperson>();
       for (const p of sidebarList) if (p.email) byEmail.set(p.email.toLowerCase(), p);
       for (const p of adminList) if (p.email) byEmail.set(p.email.toLowerCase(), { ...byEmail.get(p.email.toLowerCase()), ...p });
-      let merged = Array.from(byEmail.values());
+      let merged = Array.from(byEmail.values()).map(ensurePersonShape);
       // Apply assigned counts from current workspace sales calls
       merged = applyAssignedCounts(merged);
       if (merged.length > 0) {
@@ -269,7 +364,7 @@ export default function Salespersons() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   
   const [salespersons, setSalespersons] = useState<Salesperson[]>([
-    {
+    ensurePersonShape({
       id: '1',
       name: 'Bharath Reddy',
       email: 'bharathreddyn6@gmail.com',
@@ -278,40 +373,28 @@ export default function Salespersons() {
       workspace: 'bharath',
       status: 'Active',
       availability: 'Full Time',
-      workload: 'Medium'
-    }
+      workload: 'Medium',
+      permissions: getRolePermissionTemplate('Super Admin'),
+      availabilitySchedule: cloneSchedule(),
+      timezone: 'Asia/Kolkata',
+    })
   ]);
 
-  const [newPerson, setNewPerson] = useState<Omit<Salesperson, 'id'>>({
-    name: '',
-    email: '',
-    phone: '',
-    role: 'Staff',
-    workspace: 'bharath',
-    status: 'Active',
-    availability: 'Full Time',
-    workload: 'Low',
-    profilePicture: '',
-    permissions: [...DEFAULT_PERMISSIONS],
-    availabilitySchedule: [...DEFAULT_SCHEDULE],
-    timezone: 'Asia/Kolkata',
-    totalBookings: 0,
-    averageRating: 0,
-    notes: '',
-  });
+  const [newPerson, setNewPerson] = useState<Omit<Salesperson, 'id'>>(createBlankPerson());
 
   const saveToLocalStorage = (data: Salesperson[]) => {
+    const normalized = data.map(ensurePersonShape);
     // Persist to both admin and sidebar storages to keep pages in sync
     try {
-      localStorage.setItem('zervos_salespersons', JSON.stringify(data));
-      const sidebarShape = toTeamMembersFormat(data);
+      localStorage.setItem('zervos_salespersons', JSON.stringify(normalized));
+      const sidebarShape = toTeamMembersFormat(normalized);
       localStorage.setItem('zervos_team_members', JSON.stringify(sidebarShape));
       // Also persist to workspace-specific key if applicable
       if (selectedWorkspace) {
         localStorage.setItem(`zervos_team_members::${selectedWorkspace.id}`, JSON.stringify(sidebarShape));
       }
     } catch {}
-    setSalespersons(data);
+    setSalespersons(normalized);
     // Notify other views to refresh
     window.dispatchEvent(new CustomEvent('team-members-updated'));
     window.dispatchEvent(new Event('localStorageChanged'));
@@ -319,33 +402,17 @@ export default function Salespersons() {
 
   const handleAddPerson = () => {
     const id = Date.now().toString();
-    const person: Salesperson = {
+    const base: Salesperson = {
       id,
       ...newPerson,
-      availability: scheduleToLabel(newPerson.availabilitySchedule),
       bookingLink: generateBookingLink(newPerson.name, id),
       teamViewLink: `/team/public/${id}`,
-    };
+    } as Salesperson;
+    const person = ensurePersonShape(base);
     const updated = [...salespersons, person];
     saveToLocalStorage(updated);
     setAddModalOpen(false);
-    setNewPerson({
-      name: '',
-      email: '',
-      phone: '',
-      role: 'Staff',
-      workspace: 'bharath',
-      status: 'Active',
-      availability: 'Full Time',
-      workload: 'Low',
-      profilePicture: '',
-      permissions: [...DEFAULT_PERMISSIONS],
-      availabilitySchedule: [...DEFAULT_SCHEDULE],
-      timezone: 'Asia/Kolkata',
-      totalBookings: 0,
-      averageRating: 0,
-      notes: '',
-    });
+    setNewPerson(createBlankPerson());
     toast({
       title: "Success",
       description: `${teamMemberLabelSingular} added successfully`,
@@ -354,12 +421,10 @@ export default function Salespersons() {
 
   const handleEditPerson = () => {
     if (!editingPerson) return;
-    // Ensure human-readable availability label stays in sync with schedule
-    const normalized = { 
-      ...editingPerson, 
-      availability: scheduleToLabel(editingPerson.availabilitySchedule),
+    const normalized = ensurePersonShape({
+      ...editingPerson,
       teamViewLink: editingPerson.teamViewLink || `/team/public/${editingPerson.id}`,
-    } as Salesperson;
+    } as Salesperson);
     const updated = salespersons.map(p => p.id === normalized.id ? normalized : p);
     saveToLocalStorage(updated);
     setEditModalOpen(false);
@@ -653,7 +718,7 @@ export default function Salespersons() {
                       size="sm"
                       title="Edit"
                       onClick={() => {
-                        setEditingPerson(person);
+                        setEditingPerson(ensurePersonShape(person));
                         setEditModalOpen(true);
                       }}
                     >
@@ -775,7 +840,16 @@ export default function Salespersons() {
                 </div>
                 <div>
                   <Label>Role *</Label>
-                  <Select value={newPerson.role} onValueChange={(value: any) => setNewPerson({ ...newPerson, role: value })}>
+                      <Select
+                        value={newPerson.role}
+                        onValueChange={(value: Salesperson['role']) =>
+                          setNewPerson((prev) => ({
+                            ...prev,
+                            role: value,
+                            permissions: getRolePermissionTemplate(value),
+                          }))
+                        }
+                      >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1028,7 +1102,20 @@ export default function Salespersons() {
                     </div>
                     <div>
                       <Label>Role *</Label>
-                      <Select value={editingPerson.role} onValueChange={(value: any) => setEditingPerson({ ...editingPerson, role: value })}>
+                      <Select
+                        value={editingPerson.role}
+                        onValueChange={(value: Salesperson['role']) =>
+                          setEditingPerson((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  role: value,
+                                  permissions: getRolePermissionTemplate(value),
+                                }
+                              : prev
+                          )
+                        }
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>

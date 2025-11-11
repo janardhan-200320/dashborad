@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRoute } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,6 +76,45 @@ interface AvailabilitySchedule {
   endTime: string;
 }
 
+interface BookingPayload {
+  customerName: string;
+  email: string;
+  phone: string;
+  serviceName: string;
+  serviceId: string;
+  assignedMemberId: string;
+  assignedMemberName: string;
+  date: string;
+  time: string;
+  status: 'upcoming';
+  notes: string;
+}
+
+const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const normalizeBreakMap = (input: any): Record<string, Array<{ startTime: string; endTime: string }>> => {
+  const map: Record<string, Array<{ startTime: string; endTime: string }>> = {};
+  WEEK_DAYS.forEach(day => {
+    const entries = Array.isArray(input?.[day]) ? input[day] : [];
+    map[day] = entries
+      .map((entry: any) => ({
+        startTime: typeof entry?.startTime === 'string' ? entry.startTime : '',
+        endTime: typeof entry?.endTime === 'string' ? entry.endTime : '',
+      }))
+      .filter(b => b.startTime && b.endTime);
+  });
+  return map;
+};
+
+const convertHHMMToMinutes = (time24?: string) => {
+  if (!time24 || typeof time24 !== 'string') return null;
+  const [hoursStr, minutesStr] = time24.split(':');
+  const hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
 export default function PublicBookingPage() {
   const [, params] = useRoute('/book/:serviceId');
   const serviceId = params?.serviceId;
@@ -92,9 +131,33 @@ export default function PublicBookingPage() {
   const [specialHours, setSpecialHours] = useState<Array<{ date: string; startTime: string; endTime: string }>>([]);
   const [unavailability, setUnavailability] = useState<Array<{ startDate: string; endDate: string }>>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingPageSettings | null>(null);
+  const [orgBreaks, setOrgBreaks] = useState<Record<string, Array<{ startTime: string; endTime: string }>>>({});
+  const [callBreaks, setCallBreaks] = useState<Record<string, Array<{ startTime: string; endTime: string }>>>({});
   const [memberSchedule, setMemberSchedule] = useState<Record<string, { enabled: boolean; start: string; end: string }> | null>(null);
   const [assignedMemberId, setAssignedMemberId] = useState<string | null>(null);
   const [slotsRefreshKey, setSlotsRefreshKey] = useState(0);
+  const [useManagedTimeSlots, setUseManagedTimeSlots] = useState(false);
+
+  const persistAppointmentLocally = useCallback((appointment: BookingPayload) => {
+    const record = {
+      id: `apt-${Date.now()}`,
+      ...appointment,
+      assignedSalespersonId: appointment.assignedMemberId,
+      workspaceId: (callData as any)?.workspaceId ?? null,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      const existingRaw = localStorage.getItem('zervos_appointments');
+      const parsed = existingRaw ? JSON.parse(existingRaw) : [];
+      const next = Array.isArray(parsed) ? [...parsed, record] : [record];
+      localStorage.setItem('zervos_appointments', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('appointments-updated', { detail: { workspaceId: record.workspaceId } }));
+      window.dispatchEvent(new CustomEvent('timeslots-updated'));
+    } catch (error) {
+      console.warn('Failed to persist appointment locally:', error);
+    }
+  }, [callData]);
 
   // Listen for time slot updates
   useEffect(() => {
@@ -147,28 +210,77 @@ export default function PublicBookingPage() {
     }
   }, [callData]);
 
+  // Decide whether managed time slots should override business hours
+  useEffect(() => {
+    const determineTimeSlotMode = () => {
+      try {
+        // Per-call preference takes highest priority
+        const callPref = callData?.useManagedTimeSlots === true
+          || callData?.timeSlotStrategy === 'managed'
+          || callData?.schedulingMode === 'time-slots';
+
+        if (callPref) {
+          setUseManagedTimeSlots(true);
+          return;
+        }
+
+        // Organization-wide toggle stored in localStorage (set from Admin > Time Slots)
+        const settingsRaw = localStorage.getItem('zervos_timeslot_settings');
+        if (settingsRaw) {
+          const settings = JSON.parse(settingsRaw);
+          if (settings?.applyToPublicBooking === true || settings?.enabled === true) {
+            setUseManagedTimeSlots(true);
+            return;
+          }
+        }
+
+        // Legacy toggle key
+        const legacyToggle = localStorage.getItem('zervos_timeslots_enabled');
+        if (legacyToggle === 'true') {
+          setUseManagedTimeSlots(true);
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to determine time slot mode:', err);
+      }
+
+      setUseManagedTimeSlots(false);
+    };
+
+    determineTimeSlotMode();
+  }, [callData]);
+
   // Load organization business hours
   useEffect(() => {
     try {
       const raw = localStorage.getItem('zervos_business_hours');
+      console.log('📋 Loading business hours from localStorage:', raw);
       if (raw) {
         const data = JSON.parse(raw);
+        console.log('📋 Parsed business hours data:', data);
         const scheduleArr = Array.isArray(data?.schedule) ? data.schedule : [];
         const map: Record<string, { enabled: boolean; start: string; end: string }> = {};
-        const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
         const byDay: Record<string, any> = {};
         scheduleArr.forEach((d: any) => { byDay[d.day] = d; });
-        days.forEach(day => {
+        WEEK_DAYS.forEach(day => {
           const entry = byDay[day];
           if (entry) {
             map[day] = { enabled: !!entry.enabled, start: entry.startTime || '09:00', end: entry.endTime || '17:00' };
           }
         });
+        console.log('📋 Processed organization schedule:', map);
+        const breaksData = data?.breaks && typeof data.breaks === 'object' ? data.breaks : {};
+        const breakMap = normalizeBreakMap(breaksData);
         setOrgSchedule(map);
+        setOrgBreaks(breakMap);
         setSpecialHours(Array.isArray(data?.specialHours) ? data.specialHours : []);
         setUnavailability(Array.isArray(data?.unavailability) ? data.unavailability : []);
+      } else {
+        console.log('⚠️ No business hours found in localStorage');
       }
-    } catch {}
+    } catch (err) {
+      console.error('❌ Error loading business hours:', err);
+    }
   }, []);
 
   // Load booking page settings (branding/SEO)
@@ -191,6 +303,14 @@ export default function PublicBookingPage() {
       }
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (!callData) {
+      setCallBreaks(normalizeBreakMap(undefined));
+      return;
+    }
+    setCallBreaks(normalizeBreakMap((callData as any)?.breaks));
+  }, [callData]);
 
   // Load service data dynamically from localStorage (workspace-aware)
   useEffect(() => {
@@ -360,7 +480,7 @@ export default function PublicBookingPage() {
       setCallData(salesCall);
 
       // 5b) Resolve primary assignee weekly schedule from Admin Salespersons
-      const resolveMemberSchedule = (id: string | null) => {
+        const resolveMemberSchedule = (id: string | null) => {
         if (!id) return null;
         try {
           const raw = localStorage.getItem('zervos_salespersons');
@@ -446,31 +566,43 @@ export default function PublicBookingPage() {
     setCalendarDays(days);
   };
 
+  const slotDurationMinutes = useMemo(() => {
+    if (callData?.duration) {
+      const hours = parseInt(callData.duration.hours || '0', 10) || 0;
+      const minutes = parseInt(callData.duration.minutes || '0', 10) || 0;
+      const total = hours * 60 + minutes;
+      if (total > 0) return total;
+    }
+    if (service?.durationMinutes) return service.durationMinutes;
+    return 60;
+  }, [callData, service]);
+
+  const getBreaksForDay = useCallback((dayName: string) => {
+    const callDayBreaks = callBreaks?.[dayName];
+    if (callDayBreaks && callDayBreaks.length > 0) return callDayBreaks;
+    return orgBreaks[dayName] || [];
+  }, [callBreaks, orgBreaks]);
+
   // Dynamic time slots from Time Slot Management
   const timeSlots: TimeSlot[] = useMemo(() => {
-    try {
-      const slots = localStorage.getItem('zervos_timeslots');
-      if (!slots || !selectedDate) {
-        // Fallback to hardcoded slots
-        return [
-          { time: '09:00 AM', available: true },
-          { time: '10:00 AM', available: true },
-          { time: '11:00 AM', available: true },
-          { time: '01:00 PM', available: true },
-          { time: '02:00 PM', available: true },
-          { time: '03:00 PM', available: true },
-          { time: '04:00 PM', available: true },
-        ];
-      }
+    if (!selectedDate) return [];
 
-      const parsedSlots = JSON.parse(slots);
+    try {
+      const slots = useManagedTimeSlots ? localStorage.getItem('zervos_timeslots') : null;
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const selectedDayName = dayNames[selectedDate.getDay()];
 
-      // Filter slots for the selected day
-      const daySlots = parsedSlots.filter((slot: any) => 
-        slot.dayOfWeek === selectedDayName && slot.isActive
-      );
+      const breaksForDay = getBreaksForDay(selectedDayName);
+
+      const overlapsBreak = (slotStartMinutes: number, durationMinutes: number, breaks: Array<{ startTime: string; endTime: string }>) => {
+        const slotEndMinutes = slotStartMinutes + durationMinutes;
+        return breaks.some(breakWindow => {
+          const breakStart = convertHHMMToMinutes(breakWindow?.startTime);
+          const breakEnd = convertHHMMToMinutes(breakWindow?.endTime);
+          if (breakStart === null || breakEnd === null) return false;
+          return slotStartMinutes < breakEnd && slotEndMinutes > breakStart;
+        });
+      };
 
       // Convert 24h time to 12h format
       const formatTime = (time24: string) => {
@@ -480,15 +612,137 @@ export default function PublicBookingPage() {
         return `${hours12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} ${period}`;
       };
 
-      return daySlots.map((slot: any) => ({
-        time: formatTime(slot.startTime),
-        available: slot.currentBookings < slot.maxBookings,
-      })).sort((a: TimeSlot, b: TimeSlot) => {
-        // Sort by time
-        return a.time.localeCompare(b.time);
+      // Generate time slots from a time range using meeting duration as interval
+      const generateSlotsFromRange = (startTime: string, endTime: string, intervalMinutes: number, breaks: Array<{ startTime: string; endTime: string }> = []) => {
+        const slots: TimeSlot[] = [];
+        const [startHour, startMin] = startTime.split(':').map(Number);
+        const [endHour, endMin] = endTime.split(':').map(Number);
+        
+        // Convert times to minutes for easier calculation
+        const startTotalMinutes = startHour * 60 + startMin;
+        const endTotalMinutes = endHour * 60 + endMin;
+        
+        if (intervalMinutes <= 0) return slots;
+
+        // Only supply start times whose meeting end is still within the available window
+        for (let currentMinutes = startTotalMinutes; currentMinutes + intervalMinutes <= endTotalMinutes; currentMinutes += intervalMinutes) {
+          const currentHour = Math.floor(currentMinutes / 60);
+          const currentMin = currentMinutes % 60;
+
+          const time24 = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
+          if (!overlapsBreak(currentMinutes, intervalMinutes, breaks)) {
+            slots.push({ time: formatTime(time24), available: true });
+          } else {
+            console.log(`⛔ Skipping slot ${time24} due to break window`, breaks);
+          }
+        }
+        
+        return slots;
+      };
+
+      // If time slots are configured in Time Slot Management, use those
+      if (slots) {
+        const parsedSlots = JSON.parse(slots);
+        const daySlots = parsedSlots.filter((slot: any) => 
+          slot.dayOfWeek === selectedDayName && slot.isActive
+        );
+
+        if (daySlots.length > 0) {
+          const filteredSlots = daySlots.filter((slot: any) => {
+            if (breaksForDay.length === 0) return true;
+            const startMinutes = convertHHMMToMinutes(slot?.startTime ?? '');
+            const endMinutes = convertHHMMToMinutes(slot?.endTime ?? '');
+            if (startMinutes === null) return true;
+            const duration = endMinutes !== null && endMinutes > startMinutes
+              ? endMinutes - startMinutes
+              : slotDurationMinutes;
+            return !overlapsBreak(startMinutes, duration, breaksForDay);
+          });
+
+          return filteredSlots.map((slot: any) => ({
+            time: formatTime(slot.startTime),
+            available: slot.currentBookings < slot.maxBookings,
+          })).sort((a: TimeSlot, b: TimeSlot) => {
+            return a.time.localeCompare(b.time);
+          });
+        }
+      }
+
+      // Fallback: Generate slots from organization business hours
+      console.log('📅 Generating time slots for', selectedDayName);
+      console.log('🔍 All available schedules:', { 
+        memberSchedule: memberSchedule, 
+        callDataAvailability: callData?.availability,
+        orgSchedule: orgSchedule,
+        selectedDay: {
+          member: memberSchedule?.[selectedDayName], 
+          call: callData?.availability?.[selectedDayName],
+          org: orgSchedule[selectedDayName]
+        }
       });
+      
+      // Priority 1: Check member schedule first (highest priority for assigned salesperson)
+      if (memberSchedule && memberSchedule[selectedDayName]) {
+        const daySchedule = memberSchedule[selectedDayName];
+        console.log('🔍 Checking member schedule for', selectedDayName, ':', daySchedule);
+        if (daySchedule.enabled && daySchedule.start && daySchedule.end) {
+          console.log('✅ Using member schedule:', daySchedule.start, 'to', daySchedule.end);
+          const generatedSlots = generateSlotsFromRange(daySchedule.start, daySchedule.end, slotDurationMinutes, breaksForDay);
+          console.log('📋 Generated', generatedSlots.length, 'slots:', generatedSlots.map(s => s.time).join(', '));
+          return generatedSlots;
+        } else {
+          console.log('❌ Member schedule exists but day is disabled or incomplete:', daySchedule);
+        }
+      } else {
+        console.log('ℹ️ No member schedule for', selectedDayName);
+      }
+
+      // Priority 2: Check call-specific availability
+      if (callData?.availability && callData.availability[selectedDayName]) {
+        const daySchedule = callData.availability[selectedDayName];
+        console.log('🔍 Checking call availability for', selectedDayName, ':', daySchedule);
+        if (daySchedule.enabled && daySchedule.start && daySchedule.end) {
+          console.log('✅ Using call-specific availability:', daySchedule.start, 'to', daySchedule.end);
+          const generatedSlots = generateSlotsFromRange(daySchedule.start, daySchedule.end, slotDurationMinutes, breaksForDay);
+          console.log('📋 Generated', generatedSlots.length, 'slots:', generatedSlots.map(s => s.time).join(', '));
+          return generatedSlots;
+        } else {
+          console.log('❌ Call availability exists but day is disabled or incomplete:', daySchedule);
+        }
+      } else {
+        console.log('ℹ️ No call-specific availability for', selectedDayName);
+      }
+
+      // Priority 3: Fallback to organization schedule
+      console.log('🔍 Checking organization schedule for', selectedDayName);
+      console.log('🔍 orgSchedule object:', orgSchedule);
+      console.log('🔍 orgSchedule keys:', Object.keys(orgSchedule));
+      
+      if (Object.keys(orgSchedule).length > 0 && orgSchedule[selectedDayName]) {
+        const daySchedule = orgSchedule[selectedDayName];
+        console.log('🔍 Found org schedule for', selectedDayName, ':', daySchedule);
+        if (daySchedule.enabled && daySchedule.start && daySchedule.end) {
+          console.log('✅ Using organization schedule:', daySchedule.start, 'to', daySchedule.end);
+          const generatedSlots = generateSlotsFromRange(daySchedule.start, daySchedule.end, slotDurationMinutes, breaksForDay);
+          console.log('📋 Generated', generatedSlots.length, 'slots:', generatedSlots.map(s => s.time).join(', '));
+          return generatedSlots;
+        } else {
+          console.log('❌ Organization schedule exists but day is disabled or incomplete:', daySchedule);
+          return []; // Return empty if org schedule has this day but it's disabled
+        }
+      } else {
+        console.log('⚠️ No organization schedule found for', selectedDayName);
+      }
+
+    console.log('⚠️ No schedule found for', selectedDayName, '- using default 9 AM to 5 PM slots');
+    // Final fallback if no schedule is configured
+    const defaultSlots = generateSlotsFromRange('09:00', '17:00', slotDurationMinutes, breaksForDay);
+      console.log('📋 Generated default slots:', defaultSlots.map(s => s.time).join(', '));
+      return defaultSlots;
+
     } catch (error) {
       console.error('Error loading time slots:', error);
+      // Error fallback
       return [
         { time: '09:00 AM', available: true },
         { time: '10:00 AM', available: true },
@@ -499,7 +753,7 @@ export default function PublicBookingPage() {
         { time: '04:00 PM', available: true },
       ];
     }
-  }, [selectedDate, slotsRefreshKey]);
+  }, [selectedDate, slotsRefreshKey, memberSchedule, callData, orgSchedule, useManagedTimeSlots, service, slotDurationMinutes, getBreaksForDay]);
 
   const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
@@ -531,21 +785,34 @@ export default function PublicBookingPage() {
     // Member schedule must allow the day if present
     if (memberSchedule) {
       const m = memberSchedule[dayName];
-      if (!m || m.enabled === false) return false;
+      if (!m || m.enabled === false) {
+        console.log(`🚫 Date ${date.toDateString()} (${dayName}) blocked by member schedule:`, m);
+        return false;
+      }
     }
 
     // Per-call availability (if present) must also allow the day
     if (callData?.availability) {
       const cfg = callData.availability[dayName];
-      if (!cfg || cfg.enabled === false) return false;
+      if (!cfg || cfg.enabled === false) {
+        console.log(`🚫 Date ${date.toDateString()} (${dayName}) blocked by call availability:`, cfg);
+        return false;
+      }
       return true;
     }
 
     // Fallback to organization schedule (if set)
     const org = orgSchedule[dayName];
-    if (org) return !!org.enabled;
+    if (org) {
+      const isEnabled = !!org.enabled;
+      if (!isEnabled) {
+        console.log(`🚫 Date ${date.toDateString()} (${dayName}) blocked by org schedule:`, org);
+      }
+      return isEnabled;
+    }
 
     // Default allow if no specific restrictions
+    console.log(`✅ Date ${date.toDateString()} (${dayName}) allowed by default (no schedule configured)`);
     return true;
   };
 
@@ -623,6 +890,24 @@ export default function PublicBookingPage() {
         return false;
       }
       allowedByMember = within(m.start, m.end, m.enabled);
+    }
+
+    if (slotDurationMinutes > 0) {
+      const breaksForDay = getBreaksForDay(dayName);
+      if (breaksForDay.length > 0) {
+        const slotStartMinutes = slotDate.getHours() * 60 + slotDate.getMinutes();
+        const slotEndMinutes = slotStartMinutes + slotDurationMinutes;
+        const conflicts = breaksForDay.some(window => {
+          const start = convertHHMMToMinutes(window?.startTime);
+          const end = convertHHMMToMinutes(window?.endTime);
+          if (start === null || end === null) return false;
+          return slotStartMinutes < end && slotEndMinutes > start;
+        });
+        if (conflicts) {
+          console.log(`🚫 Slot ${slot} on ${dayName} blocked by break window`, breaksForDay);
+          return false;
+        }
+      }
     }
 
     const result = allowedBySpecial && allowedByCall && allowedByOrg && allowedByMember;
@@ -716,6 +1001,11 @@ export default function PublicBookingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }).catch(() => { /* ignore for now */ });
+
+      persistAppointmentLocally({
+        ...payload,
+        assignedMemberId: assignedMemberId || '',
+      });
 
       // Generate invoice if this is a paid booking
       if (callData?.price === 'paid' && callData?.priceAmount && parseFloat(callData.priceAmount) > 0) {
@@ -1078,23 +1368,28 @@ export default function PublicBookingPage() {
                       <div>
                         <h3 className="text-lg font-semibold mb-4">Available Times</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                          {timeSlots
-                            .filter((s) => isSlotWithinAvailability(selectedDate, s.time))
-                            .filter((s) => passesMinNotice(selectedDate, s.time))
-                            .map((slot) => (
-                            <Button
-                              key={slot.time}
-                              variant={selectedTime === slot.time ? 'default' : 'outline'}
-                              disabled={!slot.available}
-                              onClick={() => handleTimeSelect(slot.time)}
-                              className={`
-                                ${!slot.available ? 'opacity-50 cursor-not-allowed' : ''}
-                              `}
-                              style={selectedTime === slot.time && bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, borderColor: bookingSettings.backgroundColor, color: bookingSettings.buttonColor || '#ffffff' } : undefined}
-                            >
-                              {slot.time}
-                            </Button>
-                          ))}
+                          {timeSlots.length === 0 ? (
+                            <p className="col-span-full text-center text-gray-500 py-4">
+                              No time slots available for this date. Please select another date.
+                            </p>
+                          ) : (
+                            timeSlots
+                              .filter((s) => passesMinNotice(selectedDate, s.time))
+                              .map((slot) => (
+                                <Button
+                                  key={slot.time}
+                                  variant={selectedTime === slot.time ? 'default' : 'outline'}
+                                  disabled={!slot.available}
+                                  onClick={() => handleTimeSelect(slot.time)}
+                                  className={`
+                                    ${!slot.available ? 'opacity-50 cursor-not-allowed' : ''}
+                                  `}
+                                  style={selectedTime === slot.time && bookingSettings ? { backgroundColor: bookingSettings.backgroundColor, borderColor: bookingSettings.backgroundColor, color: bookingSettings.buttonColor || '#ffffff' } : undefined}
+                                >
+                                  {slot.time}
+                                </Button>
+                              ))
+                          )}
                         </div>
                       </div>
                     )}

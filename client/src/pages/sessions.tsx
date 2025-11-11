@@ -52,6 +52,13 @@ interface Workflow {
   useOrgFormFields?: boolean;
   customFormFields?: LoginField[];
   limits?: Limits;
+  breaks?: Record<string, DayBreak[]>;
+}
+
+interface DayBreak {
+  id: string;
+  startTime: string;
+  endTime: string;
 }
 
 interface Salesperson {
@@ -83,6 +90,30 @@ interface Limits {
 
 type BookingType = 'one-on-one' | 'group' | 'collective' | null;
 type ScheduleType = 'one-time' | 'recurring' | null;
+
+const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const generateBreakId = () => `break-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const createEmptyBreakMap = (): Record<string, DayBreak[]> => {
+  const map: Record<string, DayBreak[]> = {};
+  WEEK_DAYS.forEach(day => { map[day] = []; });
+  return map;
+};
+
+const normalizeBreakMap = (input?: Record<string, any>): Record<string, DayBreak[]> => {
+  const base = createEmptyBreakMap();
+  if (!input || typeof input !== 'object') return base;
+  WEEK_DAYS.forEach(day => {
+    const rows = Array.isArray(input[day]) ? input[day] : [];
+    base[day] = rows.map((entry: any) => ({
+      id: entry?.id || generateBreakId(),
+      startTime: typeof entry?.startTime === 'string' ? entry.startTime : '13:00',
+      endTime: typeof entry?.endTime === 'string' ? entry.endTime : '14:00',
+    }));
+  });
+  return base;
+};
 
 export default function WorkflowsPage() {
   const { selectedWorkspace } = useWorkspace();
@@ -185,6 +216,29 @@ export default function WorkflowsPage() {
   const [editSelectedSalespersons, setEditSelectedSalespersons] = useState<string[]>([]);
   const [editLoginFields, setEditLoginFields] = useState<LoginField[]>([]);
   const [editSearchSalespersons, setEditSearchSalespersons] = useState('');
+
+  const mutateBreaks = (day: string, mutator: (breaks: DayBreak[]) => DayBreak[]) => {
+    setEditingWorkflow(prev => {
+      if (!prev) return prev;
+      const source = prev.breaks ?? createEmptyBreakMap();
+      const next: Record<string, DayBreak[]> = { ...source };
+      const updated = mutator([...(source[day] || [])]);
+      next[day] = updated;
+      return { ...prev, breaks: next };
+    });
+  };
+
+  const handleAddBreak = (day: string) => {
+    mutateBreaks(day, list => [...list, { id: generateBreakId(), startTime: '13:00', endTime: '14:00' }]);
+  };
+
+  const handleUpdateBreak = (day: string, id: string, field: 'startTime' | 'endTime', value: string) => {
+    mutateBreaks(day, list => list.map(b => b.id === id ? { ...b, [field]: value } : b));
+  };
+
+  const handleDeleteBreak = (day: string, id: string) => {
+    mutateBreaks(day, list => list.filter(b => b.id !== id));
+  };
 
   // Load salespersons from localStorage (supports multiple keys + workspace scope)
   const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
@@ -312,7 +366,7 @@ export default function WorkflowsPage() {
     }
   };
 
-  const defaultAvailability = (): Record<string, { enabled: boolean; start: string; end: string }> => {
+  function defaultAvailability(): Record<string, { enabled: boolean; start: string; end: string }> {
     try {
       const raw = localStorage.getItem('zervos_business_hours');
       if (raw) {
@@ -321,8 +375,7 @@ export default function WorkflowsPage() {
         const map: Record<string, { enabled: boolean; start: string; end: string }> = {};
         const byDay: Record<string, any> = {};
         schedule.forEach((d: any) => { byDay[d.day] = d; });
-        const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-        days.forEach(day => {
+        WEEK_DAYS.forEach(day => {
           const entry = byDay[day];
           if (entry) {
             map[day] = {
@@ -346,7 +399,7 @@ export default function WorkflowsPage() {
       Saturday: { enabled: false, start: '09:00', end: '13:00' },
       Sunday: { enabled: false, start: '09:00', end: '13:00' },
     };
-  };
+  }
 
   // Open edit dialog for a workflow
   const handleOpenEdit = (wf: Workflow) => {
@@ -364,7 +417,8 @@ export default function WorkflowsPage() {
         bufferBeforeMins: 0,
         bufferAfterMins: 0,
         maxPerCustomer: null,
-      }
+      },
+      breaks: normalizeBreakMap(wf.breaks)
     });
     setEditSelectedSalespersons(wf.assignedSalespersons || []);
     setEditLoginFields(wf.customFormFields || []);
@@ -404,6 +458,20 @@ export default function WorkflowsPage() {
       bookingType: bookingType || 'one-on-one',
       scheduleType: scheduleType || 'one-time',
       assignedSalespersons: selectedSalespersons,
+      availability: defaultAvailability(),
+      useOrgFormFields: true,
+      customFormFields: [],
+      limits: {
+        maxPerDay: null,
+        maxPerWeek: null,
+        maxPerMonth: null,
+        minNoticeHours: 0,
+        bookingWindowDays: 60,
+        bufferBeforeMins: 0,
+        bufferAfterMins: 0,
+        maxPerCustomer: null,
+      },
+      breaks: createEmptyBreakMap(),
     };
     
     const updatedWorkflows = [...workflows, newWf];
@@ -1194,44 +1262,93 @@ export default function WorkflowsPage() {
               {/* AVAILABILITY TAB */}
               {editTab === 'availability' && editingWorkflow && (
                 <div className="space-y-4">
-                  {Object.entries(editingWorkflow.availability || {}).map(([day, cfg]) => (
-                    <div key={day} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="font-medium text-gray-800 w-28">{day}</div>
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={cfg.enabled}
-                          onCheckedChange={(checked)=> setEditingWorkflow({
-                            ...editingWorkflow,
-                            availability: {
-                              ...(editingWorkflow.availability||{}),
-                              [day]: { ...cfg, enabled: !!checked }
-                            }
-                          })}
-                        />
-                        <Input
-                          type="time"
-                          value={cfg.start}
-                          disabled={!cfg.enabled}
-                          onChange={(e)=> setEditingWorkflow({
-                            ...editingWorkflow,
-                            availability: { ...(editingWorkflow.availability||{}), [day]: { ...cfg, start: e.target.value } }
-                          })}
-                          className="w-32"
-                        />
-                        <span className="text-gray-500">to</span>
-                        <Input
-                          type="time"
-                          value={cfg.end}
-                          disabled={!cfg.enabled}
-                          onChange={(e)=> setEditingWorkflow({
-                            ...editingWorkflow,
-                            availability: { ...(editingWorkflow.availability||{}), [day]: { ...cfg, end: e.target.value } }
-                          })}
-                          className="w-32"
-                        />
+                  {Object.entries(editingWorkflow.availability || {}).map(([day, cfg]) => {
+                    const dayBreaks = editingWorkflow.breaks?.[day] || [];
+                    return (
+                      <div key={day} className="border rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between p-3">
+                          <div className="font-medium text-gray-800 w-28">{day}</div>
+                          <div className="flex items-center gap-3">
+                            <Switch
+                              checked={cfg.enabled}
+                              onCheckedChange={(checked)=> setEditingWorkflow({
+                                ...editingWorkflow,
+                                availability: {
+                                  ...(editingWorkflow.availability||{}),
+                                  [day]: { ...cfg, enabled: !!checked }
+                                }
+                              })}
+                            />
+                            <Input
+                              type="time"
+                              value={cfg.start}
+                              disabled={!cfg.enabled}
+                              onChange={(e)=> setEditingWorkflow({
+                                ...editingWorkflow,
+                                availability: { ...(editingWorkflow.availability||{}), [day]: { ...cfg, start: e.target.value } }
+                              })}
+                              className="w-32"
+                            />
+                            <span className="text-gray-500">to</span>
+                            <Input
+                              type="time"
+                              value={cfg.end}
+                              disabled={!cfg.enabled}
+                              onChange={(e)=> setEditingWorkflow({
+                                ...editingWorkflow,
+                                availability: { ...(editingWorkflow.availability||{}), [day]: { ...cfg, end: e.target.value } }
+                              })}
+                              className="w-32"
+                            />
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 border-t p-3 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-600">Breaks</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={()=> handleAddBreak(day)}
+                              disabled={!cfg.enabled}
+                            >
+                              <Plus size={14} className="mr-1" /> Add break
+                            </Button>
+                          </div>
+                          {dayBreaks.length === 0 && (
+                            <p className="text-sm text-gray-500">No breaks configured for this day.</p>
+                          )}
+                          {dayBreaks.map(breakItem => (
+                            <div key={breakItem.id} className="flex items-center gap-3">
+                              <Input
+                                type="time"
+                                value={breakItem.startTime}
+                                disabled={!cfg.enabled}
+                                onChange={(e)=> handleUpdateBreak(day, breakItem.id, 'startTime', e.target.value)}
+                                className="w-32"
+                              />
+                              <span className="text-gray-500">to</span>
+                              <Input
+                                type="time"
+                                value={breakItem.endTime}
+                                disabled={!cfg.enabled}
+                                onChange={(e)=> handleUpdateBreak(day, breakItem.id, 'endTime', e.target.value)}
+                                className="w-32"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={()=> handleDeleteBreak(day, breakItem.id)}
+                                className="text-red-500"
+                                disabled={!cfg.enabled}
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

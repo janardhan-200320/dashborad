@@ -14,6 +14,12 @@ interface DaySchedule {
   endTime: string;
 }
 
+interface DayBreak {
+  id: string;
+  startTime: string;
+  endTime: string;
+}
+
 interface SpecialHours {
   id: string;
   date: string;
@@ -28,6 +34,17 @@ interface Unavailability {
   endDate: string;
   reason: string;
 }
+
+const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const createInitialBreaks = (): Record<string, DayBreak[]> => {
+  return WEEK_DAYS.reduce((acc, day) => {
+    acc[day] = [];
+    return acc;
+  }, {} as Record<string, DayBreak[]>);
+};
+
+const createBreakId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 export default function BusinessHours() {
   const { toast } = useToast();
@@ -47,6 +64,7 @@ export default function BusinessHours() {
 
   const [specialHours, setSpecialHours] = useState<SpecialHours[]>([]);
   const [unavailability, setUnavailability] = useState<Unavailability[]>([]);
+  const [breaks, setBreaks] = useState<Record<string, DayBreak[]>>(createInitialBreaks());
   
   const [newSpecialHour, setNewSpecialHour] = useState<Omit<SpecialHours, 'id'>>({
     date: '',
@@ -68,19 +86,37 @@ export default function BusinessHours() {
       setSchedule(data.schedule || schedule);
       setSpecialHours(data.specialHours || []);
       setUnavailability(data.unavailability || []);
+      const normalizedBreaks = createInitialBreaks();
+      if (data.breaks && typeof data.breaks === 'object') {
+        WEEK_DAYS.forEach((day) => {
+          const entries = Array.isArray(data.breaks[day]) ? data.breaks[day] : [];
+          normalizedBreaks[day] = entries.map((entry: any, index: number) => ({
+            id: entry?.id || createBreakId(),
+            startTime: entry?.startTime || '13:00',
+            endTime: entry?.endTime || '14:00',
+          }));
+        });
+      }
+      setBreaks(normalizedBreaks);
     }
   }, []);
 
-  const saveToLocalStorage = (updatedSchedule: DaySchedule[], updatedSpecial: SpecialHours[], updatedUnavail: Unavailability[]) => {
+  const saveToLocalStorage = (
+    updatedSchedule: DaySchedule[],
+    updatedSpecial: SpecialHours[],
+    updatedUnavail: Unavailability[],
+    updatedBreaks: Record<string, DayBreak[]> = breaks
+  ) => {
     localStorage.setItem('zervos_business_hours', JSON.stringify({
       schedule: updatedSchedule,
       specialHours: updatedSpecial,
-      unavailability: updatedUnavail
+      unavailability: updatedUnavail,
+      breaks: updatedBreaks
     }));
   };
 
   const handleSaveWorkingHours = () => {
-    saveToLocalStorage(schedule, specialHours, unavailability);
+    saveToLocalStorage(schedule, specialHours, unavailability, breaks);
     setWorkingHoursOpen(false);
     toast({
       title: "Success",
@@ -95,7 +131,7 @@ export default function BusinessHours() {
     };
     const updated = [...specialHours, newItem];
     setSpecialHours(updated);
-    saveToLocalStorage(schedule, updated, unavailability);
+    saveToLocalStorage(schedule, updated, unavailability, breaks);
     setSpecialHoursOpen(false);
     setNewSpecialHour({ date: '', startTime: '09:00', endTime: '17:00', reason: '' });
     toast({
@@ -105,9 +141,9 @@ export default function BusinessHours() {
   };
 
   const handleDeleteSpecialHours = (id: string) => {
-    const updated = specialHours.filter(item => item.id !== id);
-    setSpecialHours(updated);
-    saveToLocalStorage(schedule, updated, unavailability);
+  const updated = specialHours.filter(item => item.id !== id);
+  setSpecialHours(updated);
+  saveToLocalStorage(schedule, updated, unavailability, breaks);
     toast({
       title: "Success",
       description: "Special hours deleted",
@@ -119,9 +155,9 @@ export default function BusinessHours() {
       id: Date.now().toString(),
       ...newUnavailability
     };
-    const updated = [...unavailability, newItem];
-    setUnavailability(updated);
-    saveToLocalStorage(schedule, specialHours, updated);
+  const updated = [...unavailability, newItem];
+  setUnavailability(updated);
+  saveToLocalStorage(schedule, specialHours, updated, breaks);
     setUnavailabilityOpen(false);
     setNewUnavailability({ startDate: '', endDate: '', reason: '' });
     toast({
@@ -133,7 +169,7 @@ export default function BusinessHours() {
   const handleDeleteUnavailability = (id: string) => {
     const updated = unavailability.filter(item => item.id !== id);
     setUnavailability(updated);
-    saveToLocalStorage(schedule, specialHours, updated);
+    saveToLocalStorage(schedule, specialHours, updated, breaks);
     toast({
       title: "Success",
       description: "Unavailability deleted",
@@ -144,6 +180,31 @@ export default function BusinessHours() {
     const updated = [...schedule];
     updated[index] = { ...updated[index], [field]: value };
     setSchedule(updated);
+  };
+
+  const addBreak = (day: string) => {
+    setBreaks((prev) => {
+      const next = { ...prev };
+      const existing = next[day] || [];
+      next[day] = [...existing, { id: createBreakId(), startTime: '13:00', endTime: '14:00' }];
+      return next;
+    });
+  };
+
+  const updateBreak = (day: string, breakId: string, field: 'startTime' | 'endTime', value: string) => {
+    setBreaks((prev) => {
+      const dayBreaks = prev[day] || [];
+      const updated = dayBreaks.map((item) => (item.id === breakId ? { ...item, [field]: value } : item));
+      return { ...prev, [day]: updated };
+    });
+  };
+
+  const deleteBreak = (day: string, breakId: string) => {
+    setBreaks((prev) => {
+      const dayBreaks = prev[day] || [];
+      const updated = dayBreaks.filter((item) => item.id !== breakId);
+      return { ...prev, [day]: updated };
+    });
   };
 
   return (
@@ -170,18 +231,26 @@ export default function BusinessHours() {
         </div>
         <div className="p-6">
           <div className="space-y-2">
-            {schedule.map((day) => (
-              <div key={day.day} className="flex items-center justify-between py-2 border-b last:border-0">
-                <span className="font-medium text-sm w-24">{day.day}</span>
-                {day.enabled ? (
-                  <span className="text-sm text-gray-600">
-                    {day.startTime} - {day.endTime}
-                  </span>
-                ) : (
-                  <span className="text-sm text-gray-400">Closed</span>
-                )}
-              </div>
-            ))}
+            {schedule.map((day) => {
+              const dayBreaks = breaks[day.day] || [];
+              return (
+                <div key={day.day} className="flex items-start justify-between py-2 border-b last:border-0">
+                  <span className="font-medium text-sm w-24">{day.day}</span>
+                  {day.enabled ? (
+                    <div className="flex flex-col items-end text-sm text-gray-600">
+                      <span>{day.startTime} - {day.endTime}</span>
+                      {dayBreaks.length > 0 && (
+                        <span className="text-xs text-gray-500">
+                          Breaks: {dayBreaks.map((b) => `${b.startTime} - ${b.endTime}`).join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400">Closed</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -265,36 +334,84 @@ export default function BusinessHours() {
             <DialogDescription>Set your weekly business hours</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {schedule.map((day, index) => (
-              <div key={day.day} className="flex items-center gap-4 p-3 border rounded-lg">
-                <div className="flex items-center gap-3 flex-1">
-                  <Switch
-                    checked={day.enabled}
-                    onCheckedChange={(checked) => updateSchedule(index, 'enabled', checked)}
-                  />
-                  <span className="font-medium w-24">{day.day}</span>
-                </div>
-                {day.enabled && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="time"
-                        value={day.startTime}
-                        onChange={(e) => updateSchedule(index, 'startTime', e.target.value)}
-                        className="w-32"
-                      />
-                      <span className="text-gray-500">to</span>
-                      <Input
-                        type="time"
-                        value={day.endTime}
-                        onChange={(e) => updateSchedule(index, 'endTime', e.target.value)}
-                        className="w-32"
-                      />
+            {schedule.map((day, index) => {
+              const dayBreaks = breaks[day.day] || [];
+              return (
+                <div key={day.day} className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4 p-3 border rounded-lg">
+                  <div className="flex items-center gap-3 flex-1">
+                    <Switch
+                      checked={day.enabled}
+                      onCheckedChange={(checked) => updateSchedule(index, 'enabled', checked)}
+                    />
+                    <span className="font-medium w-24">{day.day}</span>
+                  </div>
+                  {day.enabled && (
+                    <div className="flex-1 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          type="time"
+                          value={day.startTime}
+                          onChange={(e) => updateSchedule(index, 'startTime', e.target.value)}
+                          className="w-32"
+                        />
+                        <span className="text-gray-500">to</span>
+                        <Input
+                          type="time"
+                          value={day.endTime}
+                          onChange={(e) => updateSchedule(index, 'endTime', e.target.value)}
+                          className="w-32"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-700">Breaks</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => addBreak(day.day)}
+                          >
+                            <Plus size={14} />
+                            Add break
+                          </Button>
+                        </div>
+                        {dayBreaks.length === 0 ? (
+                          <p className="text-xs text-gray-500">No breaks for this day</p>
+                        ) : (
+                          dayBreaks.map((item) => (
+                            <div key={item.id} className="flex items-center gap-2">
+                              <Input
+                                type="time"
+                                value={item.startTime}
+                                onChange={(e) => updateBreak(day.day, item.id, 'startTime', e.target.value)}
+                                className="w-32"
+                              />
+                              <span className="text-gray-500">to</span>
+                              <Input
+                                type="time"
+                                value={item.endTime}
+                                onChange={(e) => updateBreak(day.day, item.id, 'endTime', e.target.value)}
+                                className="w-32"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteBreak(day.day, item.id)}
+                                aria-label="Remove break"
+                              >
+                                <Trash2 size={16} className="text-red-500" />
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setWorkingHoursOpen(false)}>Cancel</Button>

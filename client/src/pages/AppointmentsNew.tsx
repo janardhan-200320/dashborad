@@ -70,6 +70,14 @@ export default function AppointmentsNew() {
   const [products, setProducts] = useState<any[]>([]);
   const [isCustomService, setIsCustomService] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<{id: string; name: string; price: string; quantity: number}[]>([]);
+  const announceAppointmentsChange = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('appointments-updated'));
+      window.dispatchEvent(new CustomEvent('timeslots-updated'));
+    } catch (error) {
+      console.warn('Failed to notify listeners about appointment changes:', error);
+    }
+  };
   
   const [newAppointment, setNewAppointment] = useState({
     customerName: '',
@@ -257,7 +265,10 @@ export default function AppointmentsNew() {
     
     const updated = [...appointments, appointment];
     setAppointments(updated);
-  try { localStorage.setItem('zervos_appointments', JSON.stringify(updated)); } catch {}
+    try {
+      localStorage.setItem('zervos_appointments', JSON.stringify(updated));
+      announceAppointmentsChange();
+    } catch {}
 
     // Also send to backend for persistence across devices
     fetch('/api/appointments', {
@@ -318,7 +329,10 @@ export default function AppointmentsNew() {
     );
     
     setAppointments(updated);
-    try { localStorage.setItem('zervos_appointments', JSON.stringify(updated)); } catch {}
+    try {
+      localStorage.setItem('zervos_appointments', JSON.stringify(updated));
+      announceAppointmentsChange();
+    } catch {}
 
     setEditAppointmentOpen(false);
     setSelectedAppointment(null);
@@ -348,7 +362,10 @@ export default function AppointmentsNew() {
 
     const updated = appointments.filter(apt => apt.id !== selectedAppointment.id);
     setAppointments(updated);
-    try { localStorage.setItem('zervos_appointments', JSON.stringify(updated)); } catch {}
+    try {
+      localStorage.setItem('zervos_appointments', JSON.stringify(updated));
+      announceAppointmentsChange();
+    } catch {}
 
     setDeleteConfirmOpen(false);
     setSelectedAppointment(null);
@@ -366,7 +383,10 @@ export default function AppointmentsNew() {
     );
     
     setAppointments(updated);
-    try { localStorage.setItem('zervos_appointments', JSON.stringify(updated)); } catch {}
+    try {
+      localStorage.setItem('zervos_appointments', JSON.stringify(updated));
+      announceAppointmentsChange();
+    } catch {}
 
     const statusMessages = {
       confirmed: 'Appointment confirmed',

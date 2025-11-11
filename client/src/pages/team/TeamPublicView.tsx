@@ -9,6 +9,61 @@ import { Calendar, ClipboardList, Share2, ExternalLink, Edit as EditIcon } from 
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
+type TeamPermission = { module: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean };
+type TeamRole = 'Super Admin' | 'Admin' | 'Manager' | 'Staff';
+
+const ROLE_PERMISSION_TEMPLATES: Record<TeamRole, TeamPermission[]> = {
+  'Super Admin': [
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Sales Calls', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Booking Pages', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Availability', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Team', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Settings', canView: true, canCreate: true, canEdit: true, canDelete: true },
+  ],
+  'Admin': [
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: true },
+    { module: 'Sales Calls', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Booking Pages', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Availability', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Team', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Settings', canView: true, canCreate: true, canEdit: true, canDelete: false },
+  ],
+  'Manager': [
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Sales Calls', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Booking Pages', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Availability', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Team', canView: true, canCreate: false, canEdit: true, canDelete: false },
+    { module: 'Settings', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  ],
+  'Staff': [
+    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: false },
+    { module: 'Sales Calls', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Booking Pages', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Availability', canView: true, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Team', canView: false, canCreate: false, canEdit: false, canDelete: false },
+    { module: 'Settings', canView: false, canCreate: false, canEdit: false, canDelete: false },
+  ],
+};
+
+const clonePermissions = (perms: TeamPermission[]): TeamPermission[] => perms.map((perm) => ({ ...perm }));
+
+const getRolePermissionTemplate = (role: TeamRole): TeamPermission[] =>
+  clonePermissions(ROLE_PERMISSION_TEMPLATES[role] || ROLE_PERMISSION_TEMPLATES['Staff']);
+
+const mergePermissionsWithRole = (role: TeamRole, existing?: TeamPermission[]): TeamPermission[] => {
+  const template = getRolePermissionTemplate(role);
+  if (!existing || existing.length === 0) return template;
+  const byModule = new Map(template.map((perm) => [perm.module, perm]));
+  for (const perm of existing) {
+    if (!perm || !perm.module) continue;
+    const current = byModule.get(perm.module);
+    byModule.set(perm.module, current ? { ...current, ...perm } : { ...perm });
+  }
+  return Array.from(byModule.values());
+};
+
 interface Appointment {
   id: string;
   customerName: string;
@@ -23,9 +78,9 @@ export default function TeamPublicView() {
   const memberId = params?.memberId || '';
 
   const [memberName, setMemberName] = useState('Team Member');
-  const [memberRole, setMemberRole] = useState('Staff');
+  const [memberRole, setMemberRole] = useState<TeamRole>('Staff');
   const [memberEmail, setMemberEmail] = useState<string | null>(null);
-  const [permissions, setPermissions] = useState<Array<{ module: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }>>([]);
+  const [permissions, setPermissions] = useState<TeamPermission[]>([]);
   const [calls, setCalls] = useState<Array<{ id: string; name: string; workspace?: string }>>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [searchQ, setSearchQ] = useState('');
@@ -37,22 +92,6 @@ export default function TeamPublicView() {
   const [editProfile, setEditProfile] = useState<{ name: string; phone: string } | null>(null);
 
   // Load member basic info
-  // Default/gap-filling permissions for team modules
-  const TEAM_DEFAULT_PERMS: Array<{ module: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }> = [
-    { module: 'Appointments', canView: true, canCreate: true, canEdit: true, canDelete: false },
-    { module: 'Sales Calls', canView: true, canCreate: false, canEdit: false, canDelete: false },
-    { module: 'Booking Pages', canView: true, canCreate: false, canEdit: false, canDelete: false },
-    { module: 'Availability', canView: true, canCreate: false, canEdit: false, canDelete: false },
-  ];
-
-  const mergePermissions = (existing: Array<{ module: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }> | undefined | null) => {
-    const ex = Array.isArray(existing) ? existing : [];
-    const map = new Map<string, { module: string; canView: boolean; canCreate: boolean; canEdit: boolean; canDelete: boolean }>();
-    for (const p of ex) map.set(p.module, p);
-    for (const d of TEAM_DEFAULT_PERMS) if (!map.has(d.module)) map.set(d.module, d);
-    return Array.from(map.values());
-  };
-
   useEffect(() => {
     try {
       const raw = localStorage.getItem('zervos_salespersons');
@@ -62,10 +101,10 @@ export default function TeamPublicView() {
           const m = arr.find((p: any) => p?.id === memberId || p?.email === memberId);
           if (m) {
             setMemberName(m.name || m.email || 'Team Member');
-            setMemberRole(m.role || 'Staff');
+            setMemberRole((m.role as TeamRole) || 'Staff');
             setMemberEmail(m.email || null);
-            // Merge defaults so missing modules (like Sales Calls) still appear
-            setPermissions(mergePermissions(m.permissions));
+            // Merge role defaults so missing modules still appear
+            setPermissions(mergePermissionsWithRole((m.role as TeamRole) || 'Staff', m.permissions));
           }
         }
       }
@@ -78,9 +117,9 @@ export default function TeamPublicView() {
           const m2 = Array.isArray(arr2) ? arr2.find((p: any) => p?.id === memberId || p?.email === memberId) : null;
           if (m2) {
             setMemberName(m2.name || m2.email || 'Team Member');
-            setMemberRole(m2.role || 'Staff');
+            setMemberRole((m2.role as TeamRole) || 'Staff');
             setMemberEmail(m2.email || null);
-            setPermissions(mergePermissions(m2.permissions));
+            setPermissions(mergePermissionsWithRole((m2.role as TeamRole) || 'Staff', m2.permissions));
           }
         } catch {}
       }
