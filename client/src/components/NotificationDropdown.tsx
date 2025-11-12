@@ -31,9 +31,30 @@ function loadNotifications(): NotificationItem[] {
 function saveNotifications(items: NotificationItem[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    // Dispatch event for notification popup
+    window.dispatchEvent(new CustomEvent('notifications-updated', { detail: items }));
   } catch (e) {
     console.error('Failed to save notifications', e);
   }
+}
+
+// Export helper to add notification from anywhere in the app
+export function addNotification(notification: Omit<NotificationItem, 'id' | 'date'>) {
+  const newNotification: NotificationItem = {
+    ...notification,
+    id: `n-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    date: new Date().toISOString(),
+    read: false,
+  };
+  
+  const current = loadNotifications();
+  const updated = [newNotification, ...current];
+  saveNotifications(updated);
+  
+  // Dispatch custom event for immediate popup
+  window.dispatchEvent(new CustomEvent('new-notification', { detail: newNotification }));
+  
+  return newNotification;
 }
 
 function sampleNotifications(): NotificationItem[] {

@@ -23,10 +23,12 @@ import {
   MessageSquare,
   Headphones,
   AlertCircle,
+  Bell,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { addNotification } from '@/components/NotificationDropdown';
 
 interface FAQItem {
   id: string;
@@ -229,15 +231,54 @@ const HelpSupport = () => {
             <h1 className="text-3xl font-bold text-slate-900">Help & Support</h1>
             <p className="mt-1 text-slate-600">We're here to help you succeed</p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={openWhatsApp}
-            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:shadow-xl"
-          >
-            <MessageSquare className="h-5 w-5" />
-            WhatsApp Support
-          </motion.button>
+          <div className="flex gap-3">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                const notificationTypes = [
+                  {
+                    title: 'New booking: Hair Styling',
+                    body: 'John Doe booked Hair Styling at 2:00 PM',
+                    category: 'bookings' as const,
+                    path: '/dashboard/appointments',
+                  },
+                  {
+                    title: 'Invoice paid',
+                    body: 'Invoice INV-' + Date.now() + ' was paid (₹2,500)',
+                    category: 'invoices' as const,
+                    path: '/dashboard/invoices',
+                  },
+                  {
+                    title: 'POS sale completed',
+                    body: 'New sale of ₹1,850 recorded',
+                    category: 'pos' as const,
+                    path: '/dashboard/pos',
+                  },
+                  {
+                    title: 'System update available',
+                    body: 'New features and improvements are ready',
+                    category: 'system' as const,
+                  },
+                ];
+                const randomNotification = notificationTypes[Math.floor(Math.random() * notificationTypes.length)];
+                addNotification(randomNotification);
+              }}
+              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:shadow-xl"
+            >
+              <Bell className="h-5 w-5" />
+              Test Notification
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={openWhatsApp}
+              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:shadow-xl"
+            >
+              <MessageSquare className="h-5 w-5" />
+              WhatsApp Support
+            </motion.button>
+          </div>
         </motion.div>
 
         {/* Support Stats */}

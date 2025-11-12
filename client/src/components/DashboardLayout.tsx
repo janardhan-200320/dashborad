@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import NotificationDropdown from './NotificationDropdown';
+import NotificationPopup from './NotificationPopup';
 import ProfileDropdown from './ProfileDropdown';
 import WorkspaceSelector from './WorkspaceSelector';
 import AnimatedButton from './AnimatedButton';
@@ -425,6 +426,7 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
       </div>
 
       <TopProgressBar />
+      <NotificationPopup />
 
       <SidebarShell expanded={sidebarExpanded} />
       <MobileSidebar />
@@ -452,6 +454,26 @@ const DashboardLayout = ({ children }: { children: ReactNode }) => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">
+              <Link href="/dashboard/subscription-plans">
+                <a className="group hidden items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:scale-105 hover:shadow-lg sm:inline-flex">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
+                  </span>
+                  <span>Upgrade Now</span>
+                  <motion.svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    initial={{ x: 0 }}
+                    whileHover={{ x: 2 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </motion.svg>
+                </a>
+              </Link>
               <div className="hidden sm:inline-flex">
                 <TimeSlotsButton />
               </div>

@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, ShoppingCart, Plus, Minus, Trash2, X, 
   Coffee, Scissors, Heart, Dumbbell, Stethoscope, MoreHorizontal,
-  User, CreditCard, Banknote, Smartphone, DollarSign, Receipt, ArrowLeft
+  User, CreditCard, Banknote, Smartphone, DollarSign, Receipt, ArrowLeft, Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,11 +85,15 @@ export default function POSRegister() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showCustomService, setShowCustomService] = useState(false);
+  const [showCustomProduct, setShowCustomProduct] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [staffName, setStaffName] = useState('');
-  const { toast } = useToast();
+  const { toast} = useToast();
+  const [viewMode, setViewMode] = useState<'services' | 'products'>('services');
 
   // Custom service form
   const [customService, setCustomService] = useState({
@@ -102,17 +106,118 @@ export default function POSRegister() {
 
   const categories = ['all', 'Beauty', 'Fashion', 'Salon', 'Gym', 'Clinic', 'Other'];
 
+  // Load services and products from localStorage
+  useEffect(() => {
+    const loadInventory = () => {
+      try {
+        const allServices: Service[] = [...INITIAL_SERVICES];
+        
+        // Get current workspace
+        const currentWorkspace = localStorage.getItem('currentWorkspace') || 'default';
+        
+        // Load Services from Services page
+        const storedServices = localStorage.getItem(`zervos_services_${currentWorkspace}`);
+        if (storedServices) {
+          const services = JSON.parse(storedServices);
+          const mappedServices: Service[] = services
+            .filter((s: any) => s.isEnabled)
+            .map((s: any) => ({
+              id: `service-${s.id}`,
+              name: s.name,
+              price: Math.round(parseFloat(s.price) * 100), // Convert to cents
+              description: s.description || '',
+              duration: s.duration || '',
+              category: (s.category === 'Spa & Wellness' ? 'Fashion' : 
+                        s.category === 'Beauty & Salon' ? 'Beauty' : 
+                        s.category === 'Fitness & Training' ? 'Gym' : 'Other') as Service['category'],
+            }));
+          allServices.push(...mappedServices);
+        }
+        
+        // Load Products from Products page
+        const storedProducts = localStorage.getItem(`zervos_products_${currentWorkspace}`);
+        if (storedProducts) {
+          const products = JSON.parse(storedProducts);
+          const productServices: Service[] = products
+            .filter((p: any) => p.isEnabled)
+            .map((p: any) => ({
+              id: `product-${p.id}`,
+              name: p.name,
+              price: Math.round(parseFloat(p.price) * 100), // Convert to cents
+              description: p.description || '',
+              duration: '',
+              category: 'Other' as Service['category'],
+            }));
+          allServices.push(...productServices);
+        }
+        
+        setServices(allServices);
+        
+        toast({
+          title: 'Inventory Loaded',
+          description: `${allServices.length} items available in POS`,
+        });
+      } catch (error) {
+        console.error('Error loading services/products:', error);
+        toast({
+          title: 'Error Loading Inventory',
+          description: 'Failed to load services and products',
+          variant: 'destructive',
+        });
+      }
+    };
+    
+    // Load initially
+    loadInventory();
+    
+    // Listen for updates from Services and Products pages
+    const handleServicesUpdate = () => {
+      console.log('Services updated - reloading inventory');
+      loadInventory();
+    };
+    
+    const handleProductsUpdate = () => {
+      console.log('Products updated - reloading inventory');
+      loadInventory();
+    };
+    
+    window.addEventListener('services-updated', handleServicesUpdate);
+    window.addEventListener('products-updated', handleProductsUpdate);
+    
+    // Cleanup listeners
+    return () => {
+      window.removeEventListener('services-updated', handleServicesUpdate);
+      window.removeEventListener('products-updated', handleProductsUpdate);
+    };
+  }, []);
+
   const filteredServices = useMemo(() => {
     return services.filter(service => {
+      // Filter by view mode (services vs products) - STRICT filtering
+      let matchesViewMode = false;
+      
+      if (viewMode === 'services') {
+        // Show: 'service-' prefix OR 'custom-service-' prefix OR initial demo services
+        matchesViewMode = service.id.startsWith('service-') || 
+                          service.id.startsWith('custom-service-') ||
+                          (!service.id.startsWith('product-') && 
+                           !service.id.startsWith('custom-product-') && 
+                           !service.id.startsWith('custom-'));
+      } else if (viewMode === 'products') {
+        // Show: 'product-' prefix OR 'custom-product-' prefix
+        matchesViewMode = service.id.startsWith('product-') || 
+                          service.id.startsWith('custom-product-');
+      }
+      
       const matchesSearch = 
         service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (service.description || '').toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesCategory = selectedCategory === 'all' || service.category === selectedCategory;
       
-      return matchesSearch && matchesCategory;
+      return matchesViewMode && matchesSearch && matchesCategory;
     });
-  }, [services, searchQuery, selectedCategory]);
+  }, [services, searchQuery, selectedCategory, viewMode]);
 
   const cartItems = useMemo(() => {
     return Object.entries(cart)
@@ -169,7 +274,7 @@ export default function POSRegister() {
   const handleAddCustomService = () => {
     if (!customService.name || !customService.price) {
       toast({
-        title: 'Invalid service',
+        title: 'Invalid item',
         description: 'Please provide name and price',
         variant: 'destructive',
       });
@@ -178,8 +283,12 @@ export default function POSRegister() {
 
     const priceInCents = Math.round(parseFloat(customService.price) * 100);
     
+    // Use correct prefix based on current view mode
+    const prefix = viewMode === 'services' ? 'custom-service-' : 'custom-product-';
+    const itemType = viewMode === 'services' ? 'service' : 'product';
+    
     const newService: Service = {
-      id: `custom-${Date.now()}`,
+      id: `${prefix}${Date.now()}`,
       name: customService.name,
       price: priceInCents,
       description: customService.description,
@@ -189,6 +298,7 @@ export default function POSRegister() {
 
     setServices(prev => [newService, ...prev]);
     setShowCustomService(false);
+    setShowCustomProduct(false);
     setCustomService({
       name: '',
       price: '',
@@ -198,8 +308,8 @@ export default function POSRegister() {
     });
 
     toast({
-      title: 'Service added',
-      description: `${newService.name} has been added to services`,
+      title: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} added`,
+      description: `${newService.name} has been added to ${itemType}s`,
     });
 
     // Automatically add to cart
@@ -234,7 +344,8 @@ export default function POSRegister() {
       id: `POS-${Date.now()}`,
       customer: { 
         name: customerName || 'Walk-in Customer',
-        email: ''
+        email: customerEmail || '',
+        phone: customerPhone || ''
       },
       items: cartItems.map(item => ({
         productId: item.service.id,
@@ -272,6 +383,8 @@ export default function POSRegister() {
     setCart({});
     setShowCheckout(false);
     setCustomerName('');
+    setCustomerEmail('');
+    setCustomerPhone('');
     setStaffName('');
     setPaymentMethod('cash');
   };
@@ -302,8 +415,17 @@ export default function POSRegister() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Badge variant="outline" className="px-3 py-1 text-sm">
-                {cartItems.length} items in cart
+              <Badge variant="outline" className="px-3 py-1 text-sm bg-purple-50 border-purple-200 text-purple-700">
+                <Scissors className="mr-1 h-3 w-3" />
+                {services.filter(s => s.id.startsWith('service-') || s.id.startsWith('custom-service-')).length} Services
+              </Badge>
+              <Badge variant="outline" className="px-3 py-1 text-sm bg-green-50 border-green-200 text-green-700">
+                <Package className="mr-1 h-3 w-3" />
+                {services.filter(s => s.id.startsWith('product-') || s.id.startsWith('custom-product-')).length} Products
+              </Badge>
+              <Badge variant="outline" className="px-3 py-1 text-sm bg-blue-50 border-blue-200 text-blue-700">
+                <ShoppingCart className="mr-1 h-3 w-3" />
+                {cartItems.length} in cart
               </Badge>
               <Button
                 onClick={() => setLocation('/dashboard/pos')}
@@ -333,11 +455,33 @@ export default function POSRegister() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="Search services..."
+                  placeholder={`Search ${viewMode === 'services' ? 'services' : 'products'}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 border-slate-300 focus:border-brand-500 focus:ring-brand-200"
                 />
+              </div>
+
+              {/* View Mode Tabs */}
+              <div className="flex items-center gap-2 pb-4 border-b">
+                <Button
+                  onClick={() => setViewMode('services')}
+                  variant={viewMode === 'services' ? 'default' : 'outline'}
+                  className={viewMode === 'services' ? 'bg-brand-600' : ''}
+                  size="sm"
+                >
+                  <Scissors className="mr-2 h-4 w-4" />
+                  Services
+                </Button>
+                <Button
+                  onClick={() => setViewMode('products')}
+                  variant={viewMode === 'products' ? 'default' : 'outline'}
+                  className={viewMode === 'products' ? 'bg-green-600' : ''}
+                  size="sm"
+                >
+                  <Package className="mr-2 h-4 w-4" />
+                  Products
+                </Button>
               </div>
 
               {/* Category Filter */}
@@ -357,12 +501,37 @@ export default function POSRegister() {
                 </Select>
 
                 <Button
-                  onClick={() => setShowCustomService(true)}
+                  onClick={() => {
+                    const currentWorkspace = localStorage.getItem('currentWorkspace') || 'default';
+                    
+                    if (viewMode === 'services') {
+                      // Load Services page to add recommended services
+                      toast({
+                        title: 'Load Services',
+                        description: 'Go to Services page in sidebar to load 25 recommended services in ₹',
+                      });
+                    } else {
+                      // Load Products page to add recommended products
+                      toast({
+                        title: 'Load Products',
+                        description: 'Go to Products page in sidebar (under Items) to load 33 recommended products in ₹',
+                      });
+                    }
+                  }}
                   variant="outline"
-                  className="ml-auto border-brand-300 text-brand-700 hover:bg-brand-50"
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                >
+                  <Package className="mr-2 h-4 w-4" />
+                  Load Recommended
+                </Button>
+
+                <Button
+                  onClick={() => viewMode === 'services' ? setShowCustomService(true) : setShowCustomProduct(true)}
+                  variant="outline"
+                  className="border-brand-300 text-brand-700 hover:bg-brand-50"
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  Add custom service
+                  {viewMode === 'services' ? 'Add custom service' : 'Add custom product'}
                 </Button>
               </div>
             </motion.div>
@@ -391,8 +560,20 @@ export default function POSRegister() {
                             <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md`}>
                               <Icon className="h-5 w-5 text-white" />
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-slate-900">{service.name}</h3>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-semibold text-slate-900">{service.name}</h3>
+                                {(service.id.startsWith('service-') || service.id.startsWith('custom-service-')) && (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0 bg-purple-50 border-purple-200 text-purple-700">
+                                    {service.id.startsWith('custom-service-') ? 'Custom Service' : 'Service'}
+                                  </Badge>
+                                )}
+                                {(service.id.startsWith('product-') || service.id.startsWith('custom-product-')) && (
+                                  <Badge variant="outline" className="text-xs px-1.5 py-0 bg-green-50 border-green-200 text-green-700">
+                                    {service.id.startsWith('custom-product-') ? 'Custom Product' : 'Product'}
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-sm text-slate-600">{service.description}</p>
                             </div>
                           </div>
@@ -401,17 +582,25 @@ export default function POSRegister() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-2xl font-bold text-slate-900">{formatPrice(service.price)}</p>
-                            <p className="text-xs text-slate-500">{service.duration} • {service.category}</p>
+                            <p className="text-xs text-slate-500">
+                              {service.duration && `${service.duration} • `}{service.category}
+                            </p>
                           </div>
                           
                           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                             <Button
                               onClick={() => addToCart(service.id)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                              className={`${
+                                (service.id.startsWith('service-') || service.id.startsWith('custom-service-'))
+                                  ? 'bg-purple-600 hover:bg-purple-700' 
+                                  : (service.id.startsWith('product-') || service.id.startsWith('custom-product-'))
+                                  ? 'bg-green-600 hover:bg-green-700'
+                                  : 'bg-blue-600 hover:bg-blue-700'
+                              } text-white shadow-md`}
                               size="sm"
                             >
                               <Plus className="mr-1 h-4 w-4" />
-                              Add Service
+                              Add to Cart
                             </Button>
                           </motion.div>
                         </div>
@@ -424,13 +613,49 @@ export default function POSRegister() {
 
             {filteredServices.length === 0 && (
               <motion.div 
-                className="text-center py-12"
+                className="text-center py-12 bg-white rounded-xl border border-slate-200 p-8"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                <Search className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-600">No services found</p>
-                <p className="text-sm text-slate-500 mt-1">Try adjusting your search or filters</p>
+                <div className="inline-block p-6 bg-gradient-to-br from-purple-50 to-blue-50 rounded-full mb-4">
+                  {viewMode === 'services' ? (
+                    <Scissors className="h-16 w-16 text-purple-500" />
+                  ) : (
+                    <Package className="h-16 w-16 text-green-500" />
+                  )}
+                </div>
+                <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                  No {viewMode === 'services' ? 'Services' : 'Products'} Available
+                </h3>
+                <p className="text-slate-600 mb-4">
+                  {viewMode === 'services' 
+                    ? 'Load 25 recommended services from the Services page'
+                    : 'Load 33 recommended products from the Products page'
+                  }
+                </p>
+                <div className="flex flex-col gap-2 items-center">
+                  <p className="text-sm text-slate-500">Click "Load Recommended" button above or</p>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => window.open('/dashboard/services', '_blank')}
+                      variant="outline"
+                      className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                      size="sm"
+                    >
+                      <Scissors className="mr-2 h-4 w-4" />
+                      Open Services Page
+                    </Button>
+                    <Button
+                      onClick={() => window.open('/dashboard/products', '_blank')}
+                      variant="outline"
+                      className="border-green-300 text-green-700 hover:bg-green-50"
+                      size="sm"
+                    >
+                      <Package className="mr-2 h-4 w-4" />
+                      Open Products Page
+                    </Button>
+                  </div>
+                </div>
               </motion.div>
             )}
           </div>
@@ -574,10 +799,10 @@ export default function POSRegister() {
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                     <Button
                       onClick={handleCheckout}
-                      className="w-full bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-700 hover:to-purple-700 text-white shadow-lg text-lg py-6"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg text-lg py-6"
                     >
                       <Receipt className="mr-2 h-5 w-5" />
-                      Cash [€]
+                      PROCEED
                     </Button>
                   </motion.div>
                 </motion.div>
@@ -674,6 +899,86 @@ export default function POSRegister() {
         </DialogContent>
       </Dialog>
 
+      {/* Custom Product Dialog */}
+      <Dialog open={showCustomProduct} onOpenChange={setShowCustomProduct}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-green-600" />
+              Add Custom Product
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="product-name">Product Name *</Label>
+              <Input
+                id="product-name"
+                placeholder="e.g., Hair Oil, Shampoo"
+                value={customService.name}
+                onChange={(e) => setCustomService({ ...customService, name: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="product-price">Price (₹) *</Label>
+                <Input
+                  id="product-price"
+                  type="number"
+                  placeholder="0.00"
+                  value={customService.price}
+                  onChange={(e) => setCustomService({ ...customService, price: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="product-category">Category</Label>
+                <Select 
+                  value={customService.category} 
+                  onValueChange={(value) => setCustomService({ ...customService, category: value as Service['category'] })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Beauty">Beauty</SelectItem>
+                    <SelectItem value="Fashion">Fashion</SelectItem>
+                    <SelectItem value="Salon">Salon</SelectItem>
+                    <SelectItem value="Gym">Gym</SelectItem>
+                    <SelectItem value="Clinic">Clinic</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="product-description">Description</Label>
+              <Textarea
+                id="product-description"
+                placeholder="Brief description of the product"
+                value={customService.description}
+                onChange={(e) => setCustomService({ ...customService, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCustomProduct(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              handleAddCustomService();
+              setShowCustomProduct(false);
+            }} className="bg-green-600 hover:bg-green-700">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Product
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Checkout Dialog */}
       <Dialog open={showCheckout} onOpenChange={setShowCheckout}>
         <DialogContent className="sm:max-w-[500px]">
@@ -697,14 +1002,46 @@ export default function POSRegister() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="customer-name">Customer Name (Optional)</Label>
-              <Input
-                id="customer-name"
-                placeholder="Walk-in Customer"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
+            <div className="space-y-3 bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2 mb-2">
+                <User className="h-4 w-4 text-blue-600" />
+                <span className="font-semibold text-blue-900">Customer Information</span>
+              </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="customer-name">Name (Optional)</Label>
+                <Input
+                  id="customer-name"
+                  placeholder="Walk-in Customer"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="bg-white"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="customer-email">Email (Optional)</Label>
+                <Input
+                  id="customer-email"
+                  type="email"
+                  placeholder="customer@example.com"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  className="bg-white"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="customer-phone">Phone Number (Optional)</Label>
+                <Input
+                  id="customer-phone"
+                  type="tel"
+                  placeholder="+91 98765 43210"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="bg-white"
+                />
+              </div>
             </div>
 
             <div className="grid gap-2">

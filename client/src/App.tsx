@@ -28,6 +28,7 @@ import POSRegister from "@/pages/POSRegister";
 import LeadsPage from "@/pages/LeadsSimple";
 import TimeSlotsPage from "@/pages/time-slots";
 import HelpSupportPage from "@/pages/help-support";
+import SubscriptionPlansPage from "@/pages/subscription-plans";
 import Workspaces from "@/pages/admin/Workspaces";
 import WorkspaceView from "@/pages/admin/WorkspaceView";
 import Resources from "@/pages/admin/Resources";
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/dashboard/sessions" component={SessionsPage} />
       <Route path="/dashboard/calendar" component={CalendarPage} />
       <Route path="/dashboard/time-slots" component={TimeSlotsPage} />
+      <Route path="/dashboard/subscription-plans" component={SubscriptionPlansPage} />
       <Route path="/dashboard/help-support" component={HelpSupportPage} />
       <Route path="/dashboard/team-members" component={TeamMembersPage} />
       <Route path="/dashboard/booking-pages" component={BookingPagesPage} />

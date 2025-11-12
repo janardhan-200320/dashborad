@@ -63,6 +63,24 @@ interface Lead {
   appointments: CustomerAppointment[];
   totalAppointments: number;
   completedAppointments: number;
+  assigned?: string;
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address?: string;
+  city?: string;
+  status: 'active' | 'inactive';
+  totalSpent: number;
+  lastPurchase?: string;
+  createdAt: string;
+  notes?: string;
+  services?: string[];
+  items?: string[];
+  businessValue: number;
 }
 
 const mockLeads: Lead[] = [
@@ -175,11 +193,20 @@ const appointmentStatusColors = {
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>(mockLeads);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [activeTab, setActiveTab] = useState<'leads' | 'customers'>('leads');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSource, setFilterSource] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isAddCustomerDialogOpen, setIsAddCustomerDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isViewCustomerDialogOpen, setIsViewCustomerDialogOpen] = useState(false);
+  const [isEditLeadDialogOpen, setIsEditLeadDialogOpen] = useState(false);
+  const [isEditCustomerDialogOpen, setIsEditCustomerDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [editingLead, setEditingLead] = useState<any>(null);
+  const [editingCustomer, setEditingCustomer] = useState<any>(null);
   const { toast } = useToast();
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
@@ -205,6 +232,21 @@ export default function LeadsPage() {
     assigned: '',
   });
   const [currentTag, setCurrentTag] = useState('');
+  
+  const [newCustomer, setNewCustomer] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    status: 'active' as 'active' | 'inactive',
+    notes: '',
+    services: [] as string[],
+    items: [] as string[],
+    businessValue: 0,
+  });
+  const [currentService, setCurrentService] = useState('');
+  const [currentItem, setCurrentItem] = useState('');
 
   // Load company data and team members
   useEffect(() => {
@@ -244,7 +286,48 @@ export default function LeadsPage() {
         index === self.findIndex((m) => m.id === member.id)
       );
       
-      setTeamMembers(uniqueMembers);
+      // If no team members found, add some default ones
+      if (uniqueMembers.length === 0) {
+        const defaultMembers = [
+          {
+            id: 'tm1',
+            name: 'Sarah Johnson',
+            email: 'sarah@company.com',
+            role: 'Sales Manager',
+            phone: '+1 (555) 234-5678',
+            isActive: true
+          },
+          {
+            id: 'tm2',
+            name: 'Michael Chen',
+            email: 'michael@company.com',
+            role: 'Account Executive',
+            phone: '+1 (555) 345-6789',
+            isActive: true
+          },
+          {
+            id: 'tm3',
+            name: 'Emily Rodriguez',
+            email: 'emily@company.com',
+            role: 'Customer Success',
+            phone: '+1 (555) 456-7890',
+            isActive: true
+          },
+          {
+            id: 'tm4',
+            name: 'David Thompson',
+            email: 'david@company.com',
+            role: 'Business Development',
+            phone: '+1 (555) 567-8901',
+            isActive: true
+          }
+        ];
+        setTeamMembers(defaultMembers);
+        // Optionally save to localStorage
+        localStorage.setItem('zervos_team_members', JSON.stringify(defaultMembers));
+      } else {
+        setTeamMembers(uniqueMembers);
+      }
     } catch (error) {
       console.error('Error loading team members:', error);
     }
@@ -260,6 +343,15 @@ export default function LeadsPage() {
     const matchesSource = filterSource === 'all' || lead.source.toLowerCase().includes(filterSource.toLowerCase());
     
     return matchesSearch && matchesSource;
+  });
+
+  const filteredCustomers = customers.filter(customer => {
+    const matchesSearch = 
+      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (customer.city && customer.city.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    return matchesSearch;
   });
 
   const handleAddLead = () => {
@@ -285,6 +377,7 @@ export default function LeadsPage() {
       appointments: [],
       totalAppointments: 0,
       completedAppointments: 0,
+      assigned: newLead.assigned,
     };
 
     setLeads([lead, ...leads]);
@@ -313,16 +406,160 @@ export default function LeadsPage() {
     setCurrentTag('');
     
     toast({
+      title: "Lead Added",
+      description: `${newLead.name} has been added to your leads list.`,
+    });
+  };
+
+  const handleAddCustomer = () => {
+    if (!newCustomer.name || !newCustomer.email) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in name and email fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const customer: Customer = {
+      id: Date.now().toString(),
+      name: newCustomer.name,
+      email: newCustomer.email,
+      phone: newCustomer.phone,
+      address: newCustomer.address,
+      city: newCustomer.city,
+      status: newCustomer.status,
+      totalSpent: newCustomer.businessValue,
+      createdAt: new Date().toISOString().split('T')[0],
+      notes: newCustomer.notes,
+      services: newCustomer.services,
+      items: newCustomer.items,
+      businessValue: newCustomer.businessValue,
+    };
+
+    setCustomers([customer, ...customers]);
+    setIsAddCustomerDialogOpen(false);
+    setNewCustomer({
+      name: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      status: 'active',
+      notes: '',
+      services: [],
+      items: [],
+      businessValue: 0,
+    });
+    setCurrentService('');
+    setCurrentItem('');
+    
+    toast({
       title: "Customer Added",
-      description: `${newLead.name} has been added to your customer list.`,
+      description: `${newCustomer.name} has been added to your customer list.`,
     });
   };
 
   const handleDeleteLead = (id: string) => {
     setLeads(leads.filter(lead => lead.id !== id));
     toast({
+      title: "Lead Deleted",
+      description: "The lead has been removed from your list.",
+    });
+  };
+
+  const handleDeleteCustomer = (id: string) => {
+    setCustomers(customers.filter(customer => customer.id !== id));
+    toast({
       title: "Customer Deleted",
       description: "The customer has been removed from your list.",
+    });
+  };
+
+  const handleEditLead = (lead: Lead) => {
+    setEditingLead({
+      ...lead,
+      tags: [],
+      position: lead.role,
+      address: '',
+      city: '',
+      state: '',
+      country: 'India',
+      zipCode: '',
+      leadValue: '',
+      website: '',
+      defaultLanguage: 'System Default',
+      status: 'new',
+    });
+    setIsEditLeadDialogOpen(true);
+  };
+
+  const handleUpdateLead = () => {
+    if (!editingLead.name || !editingLead.email) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in at least name and email fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updatedLead: Lead = {
+      id: editingLead.id,
+      name: editingLead.name,
+      email: editingLead.email,
+      phone: editingLead.phone,
+      company: editingLead.company,
+      role: editingLead.role,
+      source: editingLead.source,
+      notes: editingLead.notes,
+      createdAt: editingLead.createdAt,
+      appointments: editingLead.appointments || [],
+      totalAppointments: editingLead.totalAppointments || 0,
+      completedAppointments: editingLead.completedAppointments || 0,
+      assigned: editingLead.assigned,
+      lastContact: editingLead.lastContact,
+    };
+
+    setLeads(leads.map(l => l.id === updatedLead.id ? updatedLead : l));
+    setIsEditLeadDialogOpen(false);
+    setEditingLead(null);
+    
+    toast({
+      title: "Lead Updated",
+      description: `${updatedLead.name}'s information has been updated.`,
+    });
+  };
+
+  const handleEditCustomer = (customer: Customer) => {
+    setEditingCustomer({
+      ...customer,
+    });
+    setIsEditCustomerDialogOpen(true);
+  };
+
+  const handleUpdateCustomer = () => {
+    if (!editingCustomer.name || !editingCustomer.email) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in name and email fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updatedCustomer: Customer = {
+      ...editingCustomer,
+      totalSpent: editingCustomer.businessValue,
+    };
+
+    setCustomers(customers.map(c => c.id === updatedCustomer.id ? updatedCustomer : c));
+    setIsEditCustomerDialogOpen(false);
+    setEditingCustomer(null);
+    
+    toast({
+      title: "Customer Updated",
+      description: `${updatedCustomer.name}'s information has been updated.`,
     });
   };
 
@@ -335,15 +572,28 @@ export default function LeadsPage() {
       .slice(0, 2);
   };
 
-  const totalCustomers = filteredLeads.length;
+  const totalLeads = filteredLeads.length;
+  const totalCustomers = filteredCustomers.length;
   const totalAppointments = filteredLeads.reduce((sum, lead) => sum + lead.totalAppointments, 0);
-  const activeCustomers = filteredLeads.filter(lead => lead.totalAppointments > 0).length;
+  const activeLeads = filteredLeads.filter(lead => lead.totalAppointments > 0).length;
+  const totalBusinessValue = filteredCustomers.reduce((sum, customer) => sum + customer.businessValue, 0);
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4">
+          <Card className="border-slate-200 bg-gradient-to-br from-purple-50 to-white shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-slate-600">Total Leads</CardTitle>
+              <TrendingUp className="h-4 w-4 text-purple-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-900">{totalLeads}</div>
+              <p className="text-xs text-slate-500 mt-1">Potential customers</p>
+            </CardContent>
+          </Card>
+
           <Card className="border-slate-200 bg-gradient-to-br from-brand-50 to-white shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-600">Total Customers</CardTitle>
@@ -351,17 +601,17 @@ export default function LeadsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-900">{totalCustomers}</div>
-              <p className="text-xs text-slate-500 mt-1">All registered customers</p>
+              <p className="text-xs text-slate-500 mt-1">Active customers</p>
             </CardContent>
           </Card>
 
           <Card className="border-slate-200 bg-gradient-to-br from-green-50 to-white shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Active Customers</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-500" />
+              <CardTitle className="text-sm font-medium text-slate-600">Active Leads</CardTitle>
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-slate-900">{activeCustomers}</div>
+              <div className="text-2xl font-bold text-slate-900">{activeLeads}</div>
               <p className="text-xs text-slate-500 mt-1">With appointments</p>
             </CardContent>
           </Card>
@@ -377,16 +627,16 @@ export default function LeadsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 bg-gradient-to-br from-purple-50 to-white shadow-sm">
+          <Card className="border-slate-200 bg-gradient-to-br from-orange-50 to-white shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-600">Engagement Rate</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-purple-500" />
+              <CardTitle className="text-sm font-medium text-slate-600">Conversion Rate</CardTitle>
+              <TrendingUp className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-slate-900">
-                {totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 100) : 0}%
+                {totalLeads > 0 ? Math.round((totalCustomers / totalLeads) * 100) : 0}%
               </div>
-              <p className="text-xs text-slate-500 mt-1">Customer engagement</p>
+              <p className="text-xs text-slate-500 mt-1">Leads to customers</p>
             </CardContent>
           </Card>
         </div>
@@ -394,52 +644,81 @@ export default function LeadsPage() {
         {/* Header and Actions */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Customer Management</h1>
-            <p className="text-sm text-slate-600">Track customer details and appointment history</p>
+            <h1 className="text-2xl font-bold text-slate-900">Leads & Customer Management</h1>
+            <p className="text-sm text-slate-600">Track leads, customers, and appointment history</p>
           </div>
 
-          <Button 
-            onClick={() => setIsAddDialogOpen(true)}
-            className="bg-brand-600 hover:bg-brand-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Customer
-          </Button>
+          <div className="flex gap-2">
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button 
+                onClick={() => setIsAddDialogOpen(true)}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Lead
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button 
+                onClick={() => setIsAddCustomerDialogOpen(true)}
+                className="bg-brand-600 hover:bg-brand-700"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Customer
+              </Button>
+            </motion.div>
+          </div>
         </div>
 
-        {/* Search and Filter */}
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex flex-col gap-4 sm:flex-row">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  placeholder="Search by name, email, company, or role..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <Select value={filterSource} onValueChange={setFilterSource}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Filter by source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="linkedin">LinkedIn</SelectItem>
-                  <SelectItem value="website">Website</SelectItem>
-                  <SelectItem value="referral">Referral</SelectItem>
-                  <SelectItem value="email">Email Campaign</SelectItem>
-                  <SelectItem value="phone">Phone</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Tabs for Leads and Customers */}
+        <Tabs defaultValue="leads" className="w-full" onValueChange={(value) => setActiveTab(value as 'leads' | 'customers')}>
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="leads" className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Leads ({totalLeads})
+            </TabsTrigger>
+            <TabsTrigger value="customers" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Customers ({totalCustomers})
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Customers Table */}
-        <Card className="border-slate-200 bg-white shadow-sm">
+          {/* Search and Filter */}
+          <Card className="border-slate-200 bg-white shadow-sm mt-4">
+            <CardContent className="pt-6">
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    placeholder={activeTab === 'leads' ? "Search leads by name, email, company..." : "Search customers by name, email, city..."}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                {activeTab === 'leads' && (
+                  <Select value={filterSource} onValueChange={setFilterSource}>
+                    <SelectTrigger className="w-full sm:w-[200px]">
+                      <Filter className="mr-2 h-4 w-4" />
+                      <SelectValue placeholder="Filter by source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sources</SelectItem>
+                      <SelectItem value="linkedin">LinkedIn</SelectItem>
+                      <SelectItem value="website">Website</SelectItem>
+                      <SelectItem value="referral">Referral</SelectItem>
+                      <SelectItem value="email">Email Campaign</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Leads Table */}
+          <TabsContent value="leads">
+            <Card className="border-slate-200 bg-white shadow-sm">
           <CardContent className="p-0">
             {filteredLeads.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
@@ -618,15 +897,28 @@ export default function LeadsPage() {
                                   <Eye className="mr-2 h-4 w-4" />
                                   View Full Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleEditLead(lead)}
+                                >
                                   <Edit className="mr-2 h-4 w-4" />
-                                  Edit Customer
+                                  Edit Lead
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    toast({
+                                      title: "Coming Soon",
+                                      description: "Appointment booking feature will be available soon.",
+                                    });
+                                  }}
+                                >
                                   <Calendar className="mr-2 h-4 w-4" />
                                   Book Appointment
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    window.location.href = `mailto:${lead.email}`;
+                                  }}
+                                >
                                   <Mail className="mr-2 h-4 w-4" />
                                   Send Email
                                 </DropdownMenuItem>
@@ -637,6 +929,182 @@ export default function LeadsPage() {
                                     e.preventDefault();
                                     if (window.confirm(`Are you sure you want to delete ${lead.name}? This action cannot be undone.`)) {
                                       handleDeleteLead(lead.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete Lead
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      {/* Customers Table */}
+      <TabsContent value="customers">
+        <Card className="border-slate-200 bg-white shadow-sm">
+          <CardContent className="p-0">
+            {filteredCustomers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Users className="h-12 w-12 text-slate-300" />
+                <h3 className="mt-4 text-lg font-semibold text-slate-900">No customers found</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  {searchQuery 
+                    ? 'Try adjusting your search' 
+                    : 'Get started by adding your first customer'}
+                </p>
+              </div>
+            ) : (
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-[20%]">
+                        Customer
+                      </th>
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-[20%]">
+                        Contact
+                      </th>
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-[15%]">
+                        Location
+                      </th>
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-[12%]">
+                        Status
+                      </th>
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-[15%]">
+                        Business Value
+                      </th>
+                      <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider w-[10%]">
+                        Joined
+                      </th>
+                      <th className="px-4 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-[8%]">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {filteredCustomers.map((customer, index) => (
+                      <motion.tr 
+                        key={customer.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                        className="hover:bg-slate-50 transition-colors"
+                      >
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 border-2 border-brand-200">
+                              <AvatarFallback className="bg-gradient-to-br from-brand-400 to-brand-600 text-white font-semibold">
+                                {getInitials(customer.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-semibold text-slate-900">{customer.name}</div>
+                              <div className="text-sm text-slate-500">ID: {customer.id}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                              <Mail className="h-4 w-4 text-slate-400" />
+                              {customer.email}
+                            </div>
+                            {customer.phone && (
+                              <div className="flex items-center gap-2 text-sm text-slate-600">
+                                <Phone className="h-4 w-4 text-slate-400" />
+                                {customer.phone}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="text-sm text-slate-700">
+                            {customer.city || 'N/A'}
+                          </div>
+                          {customer.address && (
+                            <div className="text-xs text-slate-500 truncate max-w-[150px]">
+                              {customer.address}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <Badge 
+                            variant="outline" 
+                            className={customer.status === 'active' 
+                              ? "bg-green-50 text-green-700 border-green-200" 
+                              : "bg-slate-100 text-slate-600 border-slate-200"}
+                          >
+                            {customer.status}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="font-semibold text-green-600">
+                            ${customer.businessValue.toFixed(2)}
+                          </div>
+                          {customer.services && customer.services.length > 0 && (
+                            <div className="text-xs text-slate-500">
+                              {customer.services.length} service{customer.services.length > 1 ? 's' : ''}
+                            </div>
+                          )}
+                          {customer.items && customer.items.length > 0 && (
+                            <div className="text-xs text-slate-500">
+                              {customer.items.length} item{customer.items.length > 1 ? 's' : ''}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="text-sm text-slate-700">
+                            {new Date(customer.createdAt).toLocaleDateString()}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedCustomer(customer);
+                                  setIsViewCustomerDialogOpen(true);
+                                }}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleEditCustomer(customer)}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit Customer
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    window.location.href = `mailto:${customer.email}`;
+                                  }}
+                                >
+                                  <Mail className="mr-2 h-4 w-4" />
+                                  Send Email
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (window.confirm(`Are you sure you want to delete ${customer.name}?`)) {
+                                      handleDeleteCustomer(customer.id);
                                     }
                                   }}
                                 >
@@ -655,9 +1123,11 @@ export default function LeadsPage() {
             )}
           </CardContent>
         </Card>
+      </TabsContent>
+    </Tabs>
       </div>
 
-      {/* Add Customer Dialog */}
+      {/* Add Lead Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -673,7 +1143,7 @@ export default function LeadsPage() {
                 >
                   <User className="h-6 w-6 text-brand-600" />
                 </motion.div>
-                Add New Customer
+                Add New Lead
               </DialogTitle>
               <DialogDescription>
                 Create a comprehensive customer profile with all relevant details
@@ -1116,7 +1586,7 @@ export default function LeadsPage() {
                   >
                     <CheckCircle2 className="mr-2 h-4 w-4" />
                   </motion.div>
-                  Add Customer
+                  Add Lead
                 </Button>
               </motion.div>
             </motion.div>
@@ -1197,9 +1667,22 @@ export default function LeadsPage() {
 
                     <Separator />
 
-                    <div className="space-y-2">
-                      <Label className="text-xs text-slate-500">Source</Label>
-                      <p className="text-sm">{selectedLead.source}</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs text-slate-500">Source</Label>
+                        <p className="text-sm">{selectedLead.source}</p>
+                      </div>
+                      {selectedLead.assigned && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-slate-500">Assigned To</Label>
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-slate-400" />
+                            <p className="text-sm">
+                              {teamMembers.find(m => m.id === selectedLead.assigned)?.name || 'Unknown'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {selectedLead.notes && (
@@ -1296,6 +1779,729 @@ export default function LeadsPage() {
                 <Button className="bg-brand-600 hover:bg-brand-700">
                   <Calendar className="mr-2 h-4 w-4" />
                   Book New Appointment
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Customer Dialog */}
+      <Dialog open={isAddCustomerDialogOpen} onOpenChange={setIsAddCustomerDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <DialogTitle className="text-2xl flex items-center gap-2">
+                <motion.div
+                  animate={{ rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                >
+                  <Users className="h-6 w-6 text-brand-600" />
+                </motion.div>
+                Add New Customer
+              </DialogTitle>
+              <DialogDescription>
+                Add a verified customer with essential contact information
+              </DialogDescription>
+            </motion.div>
+          </DialogHeader>
+          
+          <motion.div 
+            className="grid gap-4 py-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+          >
+            {/* Name and Email Row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="customer-name" className="flex items-center gap-1">
+                  <span className="text-red-500">*</span> Full Name
+                </Label>
+                <Input
+                  id="customer-name"
+                  value={newCustomer.name}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                  className="border-slate-300 focus:border-brand-500"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="customer-email" className="flex items-center gap-1">
+                  <span className="text-red-500">*</span> Email Address
+                </Label>
+                <Input
+                  id="customer-email"
+                  type="email"
+                  value={newCustomer.email}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                  className="border-slate-300 focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            {/* Phone */}
+            <div className="grid gap-2">
+              <Label htmlFor="customer-phone">Phone Number</Label>
+              <Input
+                id="customer-phone"
+                value={newCustomer.phone}
+                onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                className="border-slate-300 focus:border-brand-500"
+              />
+            </div>
+
+            {/* Address and City Row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="customer-address">Address</Label>
+                <Input
+                  id="customer-address"
+                  value={newCustomer.address}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
+                  className="border-slate-300 focus:border-brand-500"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="customer-city">City</Label>
+                <Input
+                  id="customer-city"
+                  value={newCustomer.city}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })}
+                  className="border-slate-300 focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            {/* Services Taken */}
+            <div className="grid gap-2">
+              <Label htmlFor="customer-services" className="flex items-center gap-2">
+                <Briefcase className="h-4 w-4 text-slate-500" />
+                Services Taken
+              </Label>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    id="customer-services"
+                    placeholder="Add service and press Enter"
+                    value={currentService}
+                    onChange={(e) => setCurrentService(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && currentService.trim()) {
+                        e.preventDefault();
+                        setNewCustomer({ ...newCustomer, services: [...newCustomer.services, currentService.trim()] });
+                        setCurrentService('');
+                      }
+                    }}
+                    className="flex-1 border-slate-300 focus:border-brand-500"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (currentService.trim()) {
+                        setNewCustomer({ ...newCustomer, services: [...newCustomer.services, currentService.trim()] });
+                        setCurrentService('');
+                      }
+                    }}
+                    className="px-3"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {newCustomer.services.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {newCustomer.services.map((service, index) => (
+                      <Badge 
+                        key={index} 
+                        variant="secondary" 
+                        className="bg-blue-100 text-blue-800 border-blue-200 flex items-center gap-1"
+                      >
+                        {service}
+                        <button
+                          type="button"
+                          onClick={() => setNewCustomer({ 
+                            ...newCustomer, 
+                            services: newCustomer.services.filter((_, i) => i !== index) 
+                          })}
+                          className="ml-1 hover:text-blue-900"
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Items Purchased */}
+            <div className="grid gap-2">
+              <Label htmlFor="customer-items" className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-slate-500" />
+                Items Purchased
+              </Label>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    id="customer-items"
+                    placeholder="Add item and press Enter"
+                    value={currentItem}
+                    onChange={(e) => setCurrentItem(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && currentItem.trim()) {
+                        e.preventDefault();
+                        setNewCustomer({ ...newCustomer, items: [...newCustomer.items, currentItem.trim()] });
+                        setCurrentItem('');
+                      }
+                    }}
+                    className="flex-1 border-slate-300 focus:border-brand-500"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (currentItem.trim()) {
+                        setNewCustomer({ ...newCustomer, items: [...newCustomer.items, currentItem.trim()] });
+                        setCurrentItem('');
+                      }
+                    }}
+                    className="px-3"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {newCustomer.items.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {newCustomer.items.map((item, index) => (
+                      <Badge 
+                        key={index} 
+                        variant="secondary" 
+                        className="bg-green-100 text-green-800 border-green-200 flex items-center gap-1"
+                      >
+                        {item}
+                        <button
+                          type="button"
+                          onClick={() => setNewCustomer({ 
+                            ...newCustomer, 
+                            items: newCustomer.items.filter((_, i) => i !== index) 
+                          })}
+                          className="ml-1 hover:text-green-900"
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Business Value */}
+            <div className="grid gap-2">
+              <Label htmlFor="customer-business-value" className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-slate-500" />
+                Business Value ($)
+              </Label>
+              <Input
+                id="customer-business-value"
+                type="number"
+                min="0"
+                step="0.01"
+                value={newCustomer.businessValue}
+                onChange={(e) => setNewCustomer({ ...newCustomer, businessValue: parseFloat(e.target.value) || 0 })}
+                className="border-slate-300 focus:border-brand-500"
+              />
+              <p className="text-xs text-slate-500">Total revenue generated from this customer</p>
+            </div>
+
+            {/* Status */}
+            <div className="grid gap-2">
+              <Label htmlFor="customer-status">Status</Label>
+              <Select value={newCustomer.status} onValueChange={(value) => setNewCustomer({ ...newCustomer, status: value as 'active' | 'inactive' })}>
+                <SelectTrigger className="border-slate-300 focus:border-brand-500">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes */}
+            <div className="grid gap-2">
+              <Label htmlFor="customer-notes">Notes</Label>
+              <Textarea
+                id="customer-notes"
+                value={newCustomer.notes}
+                onChange={(e) => setNewCustomer({ ...newCustomer, notes: e.target.value })}
+                className="min-h-[80px] border-slate-300 focus:border-brand-500"
+              />
+            </div>
+          </motion.div>
+
+          <DialogFooter>
+            <motion.div className="flex gap-2 w-full sm:w-auto" whileHover={{ scale: 1.01 }}>
+              <Button variant="outline" onClick={() => setIsAddCustomerDialogOpen(false)} className="flex-1 sm:flex-none">
+                Cancel
+              </Button>
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 sm:flex-none">
+                <Button 
+                  onClick={handleAddCustomer}
+                  disabled={!newCustomer.name || !newCustomer.email}
+                  className="bg-brand-600 hover:bg-brand-700 w-full"
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Add Customer
+                </Button>
+              </motion.div>
+            </motion.div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Customer Details Dialog */}
+      <Dialog open={isViewCustomerDialogOpen} onOpenChange={setIsViewCustomerDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          {selectedCustomer && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16 border-2 border-brand-200">
+                    <AvatarFallback className="bg-gradient-to-br from-brand-400 to-brand-600 text-white font-semibold text-xl">
+                      {getInitials(selectedCustomer.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <DialogTitle className="text-2xl">{selectedCustomer.name}</DialogTitle>
+                    <DialogDescription>Customer since {new Date(selectedCustomer.createdAt).toLocaleDateString()}</DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <Separator className="my-4" />
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase">Status</Label>
+                    <Badge 
+                      variant="outline" 
+                      className={selectedCustomer.status === 'active' 
+                        ? "bg-green-50 text-green-700 border-green-200 mt-1" 
+                        : "bg-slate-100 text-slate-600 border-slate-200 mt-1"}
+                    >
+                      {selectedCustomer.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase">Total Spent</Label>
+                    <p className="font-semibold text-lg">${selectedCustomer.totalSpent.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                    <Mail className="h-3 w-3" />
+                    Email
+                  </Label>
+                  <p className="mt-1">{selectedCustomer.email}</p>
+                </div>
+
+                {selectedCustomer.phone && (
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                      <Phone className="h-3 w-3" />
+                      Phone
+                    </Label>
+                    <p className="mt-1">{selectedCustomer.phone}</p>
+                  </div>
+                )}
+
+                {(selectedCustomer.address || selectedCustomer.city) && (
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                      <Building2 className="h-3 w-3" />
+                      Location
+                    </Label>
+                    <p className="mt-1">
+                      {selectedCustomer.address && <>{selectedCustomer.address}<br /></>}
+                      {selectedCustomer.city}
+                    </p>
+                  </div>
+                )}
+
+                {selectedCustomer.lastPurchase && (
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      Last Purchase
+                    </Label>
+                    <p className="mt-1">{new Date(selectedCustomer.lastPurchase).toLocaleDateString()}</p>
+                  </div>
+                )}
+
+                {selectedCustomer.services && selectedCustomer.services.length > 0 && (
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                      <Briefcase className="h-3 w-3" />
+                      Services Taken
+                    </Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedCustomer.services.map((service, index) => (
+                        <Badge key={index} variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200">
+                          {service}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedCustomer.items && selectedCustomer.items.length > 0 && (
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                      <FileText className="h-3 w-3" />
+                      Items Purchased
+                    </Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedCustomer.items.map((item, index) => (
+                        <Badge key={index} variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                          {item}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedCustomer.businessValue > 0 && (
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                      <TrendingUp className="h-3 w-3" />
+                      Business Value
+                    </Label>
+                    <p className="mt-1 text-lg font-semibold text-green-600">
+                      ${selectedCustomer.businessValue.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+
+                {selectedCustomer.notes && (
+                  <div>
+                    <Label className="text-slate-500 text-xs uppercase flex items-center gap-2">
+                      <FileText className="h-3 w-3" />
+                      Notes
+                    </Label>
+                    <p className="mt-1 text-sm text-slate-600 bg-slate-50 rounded p-3">{selectedCustomer.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="mt-4">
+                <Button variant="outline" onClick={() => setIsViewCustomerDialogOpen(false)}>
+                  Close
+                </Button>
+                <Button 
+                  className="bg-brand-600 hover:bg-brand-700"
+                  onClick={() => {
+                    setIsViewCustomerDialogOpen(false);
+                    handleEditCustomer(selectedCustomer);
+                  }}
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit Customer
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Lead Dialog */}
+      <Dialog open={isEditLeadDialogOpen} onOpenChange={setIsEditLeadDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          {editingLead && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl flex items-center gap-2">
+                  <Edit className="h-6 w-6 text-purple-600" />
+                  Edit Lead
+                </DialogTitle>
+                <DialogDescription>
+                  Update lead information
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                {/* Name and Email */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-lead-name" className="flex items-center gap-1">
+                      <span className="text-red-500">*</span> Full Name
+                    </Label>
+                    <Input
+                      id="edit-lead-name"
+                      value={editingLead.name}
+                      onChange={(e) => setEditingLead({ ...editingLead, name: e.target.value })}
+                      placeholder="Enter full name"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-lead-email" className="flex items-center gap-1">
+                      <span className="text-red-500">*</span> Email
+                    </Label>
+                    <Input
+                      id="edit-lead-email"
+                      type="email"
+                      value={editingLead.email}
+                      onChange={(e) => setEditingLead({ ...editingLead, email: e.target.value })}
+                      placeholder="email@example.com"
+                    />
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-lead-phone">Phone</Label>
+                  <Input
+                    id="edit-lead-phone"
+                    value={editingLead.phone}
+                    onChange={(e) => setEditingLead({ ...editingLead, phone: e.target.value })}
+                    placeholder="+1 (555) 123-4567"
+                  />
+                </div>
+
+                {/* Company and Role */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-lead-company">Company</Label>
+                    <Input
+                      id="edit-lead-company"
+                      value={editingLead.company}
+                      onChange={(e) => setEditingLead({ ...editingLead, company: e.target.value })}
+                      placeholder="Company name"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-lead-role">Role/Position</Label>
+                    <Input
+                      id="edit-lead-role"
+                      value={editingLead.role}
+                      onChange={(e) => setEditingLead({ ...editingLead, role: e.target.value })}
+                      placeholder="Job title"
+                    />
+                  </div>
+                </div>
+
+                {/* Source and Assigned */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-lead-source">Source</Label>
+                    <Select value={editingLead.source} onValueChange={(value) => setEditingLead({ ...editingLead, source: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Website Contact Form">Website Contact Form</SelectItem>
+                        <SelectItem value="LinkedIn">LinkedIn</SelectItem>
+                        <SelectItem value="Referral">Referral</SelectItem>
+                        <SelectItem value="Email Campaign">Email Campaign</SelectItem>
+                        <SelectItem value="Cold Call">Cold Call</SelectItem>
+                        <SelectItem value="Trade Show">Trade Show</SelectItem>
+                        <SelectItem value="Social Media">Social Media</SelectItem>
+                        <SelectItem value="Walk-in">Walk-in</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-lead-assigned">Assigned To</Label>
+                    <Select 
+                      value={editingLead.assigned}
+                      onValueChange={(value) => setEditingLead({ ...editingLead, assigned: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={teamMembers.length > 0 ? "Select team member" : "No staff available"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teamMembers.length > 0 ? (
+                          teamMembers.map((member) => (
+                            <SelectItem key={member.id} value={member.id}>
+                              {member.name} {member.role ? `(${member.role})` : ''}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>No staff available</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-lead-notes">Notes</Label>
+                  <Textarea
+                    id="edit-lead-notes"
+                    value={editingLead.notes}
+                    onChange={(e) => setEditingLead({ ...editingLead, notes: e.target.value })}
+                    placeholder="Additional notes..."
+                    className="min-h-[80px]"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditLeadDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleUpdateLead}
+                  disabled={!editingLead.name || !editingLead.email}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Update Lead
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Customer Dialog */}
+      <Dialog open={isEditCustomerDialogOpen} onOpenChange={setIsEditCustomerDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          {editingCustomer && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl flex items-center gap-2">
+                  <Edit className="h-6 w-6 text-brand-600" />
+                  Edit Customer
+                </DialogTitle>
+                <DialogDescription>
+                  Update customer information
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                {/* Name and Email */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-customer-name" className="flex items-center gap-1">
+                      <span className="text-red-500">*</span> Full Name
+                    </Label>
+                    <Input
+                      id="edit-customer-name"
+                      value={editingCustomer.name}
+                      onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
+                      placeholder="Enter full name"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-customer-email" className="flex items-center gap-1">
+                      <span className="text-red-500">*</span> Email
+                    </Label>
+                    <Input
+                      id="edit-customer-email"
+                      type="email"
+                      value={editingCustomer.email}
+                      onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })}
+                      placeholder="email@example.com"
+                    />
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-customer-phone">Phone</Label>
+                  <Input
+                    id="edit-customer-phone"
+                    value={editingCustomer.phone}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
+                    placeholder="+1 (555) 123-4567"
+                  />
+                </div>
+
+                {/* Address and City */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-customer-address">Address</Label>
+                    <Input
+                      id="edit-customer-address"
+                      value={editingCustomer.address || ''}
+                      onChange={(e) => setEditingCustomer({ ...editingCustomer, address: e.target.value })}
+                      placeholder="123 Main St"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-customer-city">City</Label>
+                    <Input
+                      id="edit-customer-city"
+                      value={editingCustomer.city || ''}
+                      onChange={(e) => setEditingCustomer({ ...editingCustomer, city: e.target.value })}
+                      placeholder="New York"
+                    />
+                  </div>
+                </div>
+
+                {/* Business Value */}
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-customer-business-value">Business Value ($)</Label>
+                  <Input
+                    id="edit-customer-business-value"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingCustomer.businessValue}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, businessValue: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                {/* Status */}
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-customer-status">Status</Label>
+                  <Select value={editingCustomer.status} onValueChange={(value) => setEditingCustomer({ ...editingCustomer, status: value as 'active' | 'inactive' })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Notes */}
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-customer-notes">Notes</Label>
+                  <Textarea
+                    id="edit-customer-notes"
+                    value={editingCustomer.notes || ''}
+                    onChange={(e) => setEditingCustomer({ ...editingCustomer, notes: e.target.value })}
+                    placeholder="Additional notes..."
+                    className="min-h-[80px]"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditCustomerDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleUpdateCustomer}
+                  disabled={!editingCustomer.name || !editingCustomer.email}
+                  className="bg-brand-600 hover:bg-brand-700"
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Update Customer
                 </Button>
               </DialogFooter>
             </>
